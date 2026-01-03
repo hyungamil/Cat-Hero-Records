@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>점령전 통합 관리 시스템 (ERP)</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
+        
+        :root {
+            --brand-primary: #2563eb;
+            --brand-slate: #f8fafc;
+            --brand-dark: #0f172a;
+        }
+
+        body { 
+            font-family: 'Noto Sans KR', 'Inter', sans-serif; 
+            transition: background-color 0.2s;
+            background-color: #f1f5f9;
+            letter-spacing: -0.025em;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .dark body { background-color: #020617; }
+
+        .dashboard-card { 
+            border-radius: 0.75rem; 
+            background: white;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+        }
+
+        .dark .dashboard-card {
+            background-color: #1e293b;
+            border-color: #334155;
+            color: #f1f5f9;
+        }
+
+        .nav-link {
+            padding: 0.5rem 0.25rem;
+            font-weight: 600;
+            color: #64748b;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .nav-link.active {
+            color: var(--brand-primary);
+            border-bottom-color: var(--brand-primary);
+        }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        
+        @keyframes marquee { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
+        .animate-marquee { display: inline-block; animation: marquee 30s linear infinite; }
+
+        .app-container {
+            width: 100%;
+            max-width: 1440px;
+            margin: 0 auto;
+            min-height: 100vh;
+        }
+
+        /* 전체 인원 2열 고정 */
+        .agent-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.25rem;
+        }
+
+        @media (min-width: 1024px) {
+            .desktop-layout {
+                display: grid;
+                grid-template-columns: 380px 1fr;
+                gap: 1.5rem;
+                align-items: start;
+            }
+        }
+
+        .custom-modal-overlay {
+            background-color: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+        }
+    </style>
+</head>
+<body class="text-slate-900">
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp, deleteDoc, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : { apiKey: "" };
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'cat-hero-v24-final';
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        const { useState, useEffect, useMemo } = React;
+
+        const islands = [
+            { name: '해적', icon: 'fa-anchor' },
+            { name: '늑대', icon: 'fa-paw' },
+            { name: '고양이', icon: 'fa-cat' },
+            { name: '음식', icon: 'fa-utensils' },
+        ];
+
+        const mobs = ['일반몹', '보스'];
+        const TOTAL_RESOURCES = 20; 
+        const INITIAL_MEMBERS = ["늑대벼리", "마자유", "고기쟁이", "김동순", "일민", "캣핑", "콘스", "하늘구름바다", "창식2", "나는도비", "노들노들", "포저", "라잌늑냥", "베리발", "장귝", "유나s"];
+
+        function App() {
+            // -- 상태 관리 --
+            const [user, setUser] = useState(null);
+            const [authLoading, setAuthLoading] = useState(true);
+            const [nickname, setNickname] = useState(localStorage.getItem('cat_hero_nickname') || '');
+            const [isNameSet, setIsNameSet] = useState(!!localStorage.getItem('cat_hero_nickname'));
+            const [isAdminMode, setIsAdminMode] = useState(false);
+            const [adminPass, setAdminPass] = useState("");
+            const [showAdminEntry, setShowAdminEntry] = useState(false);
+            const [isDarkMode, setIsDarkMode] = useState(localStorage.getItem('isDarkMode') === 'true');
+            
+            const [selectedIsland, setSelectedIsland] = useState('해적');
+            const [selectedMob, setSelectedMob] = useState('일반몹');
+            const [playMin, setPlayMin] = useState(0);
+            const [playSec, setPlaySec] = useState(0);
+            
+            const [logs, setLogs] = useState([]);
+            const [members, setMembers] = useState([]);
+            const [notice, setNotice] = useState("시스템이 정상 작동 중입니다.");
+            const [newNotice, setNewNotice] = useState("");
+            const [newMemberName, setNewMemberName] = useState("");
+            
+            const [activeMenu, setActiveMenu] = useState('record');
+            const [timeLeftStr, setTimeLeftStr] = useState("");
+
+            const [uiAlert, setUiAlert] = useState(null);
+            const [uiConfirm, setUiConfirm] = useState(null);
+
+            const showAlert = (msg, type = 'success') => setUiAlert({ message: msg, type });
+            const closeAlert = () => setUiAlert(null);
+
+            // -- 라이프사이클 --
+            useEffect(() => {
+                if (isDarkMode) document.documentElement.classList.add('dark');
+                else document.documentElement.classList.remove('dark');
+                localStorage.setItem('isDarkMode', isDarkMode);
+            }, [isDarkMode]);
+
+            useEffect(() => {
+                const updateTimer = () => {
+                    const now = new Date();
+                    const day = now.getDay();
+                    let target = new Date();
+                    target.setHours(8, 45, 0, 0);
+                    const daysUntilMonday = (1 + 7 - day) % 7 || 7;
+                    target.setDate(now.getDate() + daysUntilMonday);
+                    const diff = target - now;
+                    if (diff <= 0) setTimeLeftStr("시즌 종료");
+                    else {
+                        const d = Math.floor(diff / (1000 * 60 * 60 * 24));
+                        const h = Math.floor((diff / (1000 * 60 * 60)) % 24);
+                        const m = Math.floor((diff / (1000 * 60)) % 60);
+                        const s = Math.floor((diff / 1000) % 60);
+                        setTimeLeftStr(`${d}일 ${h}:${m}:${s}`);
+                    }
+                };
+                const timerId = setInterval(updateTimer, 1000);
+                updateTimer();
+                return () => clearInterval(timerId);
+            }, []);
+
+            useEffect(() => {
+                const initAuth = async () => {
+                    try {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (error) {
+                        console.error("인증 오류:", error);
+                    } finally { setAuthLoading(false); }
+                };
+                initAuth();
+                const unsubscribe = onAuthStateChanged(auth, (u) => {
+                    setUser(u);
+                    if (u) setAuthLoading(false);
+                });
+                return () => unsubscribe();
+            }, []);
+
+            useEffect(() => {
+                if (!user || authLoading) return;
+
+                const unsubMembers = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'members_v24'), (snapshot) => {
+                    if (snapshot.empty) {
+                        INITIAL_MEMBERS.forEach(name => addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'members_v24'), { name }));
+                    } else {
+                        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        setMembers(data.sort((a, b) => a.name.localeCompare(b.name)));
+                    }
+                });
+
+                const unsubLogs = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24'), (snapshot) => {
+                    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setLogs(data.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)));
+                });
+
+                const unsubSettings = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), (snapshot) => {
+                    if (snapshot.exists()) {
+                        const s = snapshot.data();
+                        setNotice(s.notice || "");
+                        setNewNotice(s.notice || "");
+                    }
+                });
+
+                return () => { unsubMembers(); unsubLogs(); unsubSettings(); };
+            }, [user, authLoading]);
+
+            // -- 데이터 로직 --
+            const stats = useMemo(() => {
+                const playerMap = {};
+                members.forEach(m => playerMap[m.name] = { swords: 0, timeSec: 0, participated: false, bossHits: 0 });
+                logs.forEach(log => {
+                    if (playerMap[log.nickname]) {
+                        playerMap[log.nickname].swords += 1;
+                        playerMap[log.nickname].timeSec += (Number(log.playMin || 0) * 60 + Number(log.playSec || 0));
+                        playerMap[log.nickname].participated = true;
+                        if (log.mob === '보스') playerMap[log.nickname].bossHits += 1;
+                    }
+                });
+                const ranking = Object.entries(playerMap)
+                    .filter(([_, data]) => data.participated)
+                    .sort((a, b) => b[1].swords - a[1].swords || b[1].timeSec - a[1].timeSec);
+                return { playerMap, myRank: ranking.findIndex(r => r[0] === nickname) + 1 };
+            }, [logs, members, nickname]);
+
+            const handleResetSession = () => {
+                setUiConfirm({
+                    message: "요원 정보를 초기화하고 이름 선택 화면으로 돌아가시겠습니까?",
+                    onConfirm: () => {
+                        localStorage.removeItem('cat_hero_nickname');
+                        setNickname('');
+                        setIsNameSet(false);
+                        window.location.reload();
+                    }
+                });
+            };
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                if (!user) return;
+                if (!nickname) { showAlert("사용자 정보가 없습니다.", "error"); return; }
+                if (stats.playerMap[nickname]?.swords >= TOTAL_RESOURCES) { showAlert("할당된 보고 횟수를 모두 소진했습니다.", "error"); return; }
+                if (playMin === 0 && playSec === 0) { showAlert("수행 시간을 입력해 주세요.", "error"); return; }
+
+                try {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24'), {
+                        nickname, island: selectedIsland, mob: selectedMob,
+                        playMin: Number(playMin), playSec: Number(playSec),
+                        timestamp: serverTimestamp(), uid: user.uid
+                    });
+                    setPlayMin(0); setPlaySec(0);
+                    showAlert("데이터가 정상 보고되었습니다.");
+                } catch (err) { showAlert("보고 실패: " + err.message, "error"); }
+            };
+
+            const handleDeleteLog = (logId) => {
+                setUiConfirm({
+                    message: "해당 기록을 영구 삭제하시겠습니까?",
+                    onConfirm: async () => {
+                        try {
+                            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24', logId));
+                            showAlert("기록이 성공적으로 삭제되었습니다.");
+                        } catch (err) {
+                            showAlert("삭제 중 오류가 발생했습니다.", "error");
+                        }
+                    }
+                });
+            };
+
+            const adjustTime = (type, val) => {
+                if (type === 'min') setPlayMin(p => Math.max(0, p + val));
+                else {
+                    setPlaySec(p => {
+                        let n = p + val;
+                        if (n >= 60) { setPlayMin(m => m + 1); return n - 60; }
+                        if (n < 0 && playMin > 0) { setPlayMin(m => m - 1); return n + 60; }
+                        return Math.max(0, Math.min(59, n));
+                    });
+                }
+            };
+
+            // -- UI 컴포넌트 --
+            if (!isNameSet && !isAdminMode) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center p-4 bg-slate-100 dark:bg-slate-950">
+                        <div className="dashboard-card p-12 w-full max-w-sm text-center shadow-2xl border-t-8 border-blue-600 animate-fadeIn">
+                            <h1 className="text-2xl font-black tracking-tight mb-1 text-blue-600 italic">관제 센터 로그인</h1>
+                            <p className="text-[10px] text-slate-400 mb-10 font-bold uppercase tracking-widest">점령전 통합 관리 시스템</p>
+                            <div className="space-y-6">
+                                <div className="text-left">
+                                    <label className="text-[11px] font-black text-slate-500 uppercase ml-1 mb-2 block">요원 인증</label>
+                                    <select className="w-full p-4 bg-slate-50 text-sm font-bold dark:text-slate-900 border-2 border-slate-200 focus:border-blue-500 outline-none rounded-xl" 
+                                        value={nickname} onChange={e => setNickname(e.target.value)}>
+                                        <option value="">본인 성명을 선택하세요</option>
+                                        {members.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+                                    </select>
+                                </div>
+                                <button onClick={() => { if(nickname) { localStorage.setItem('cat_hero_nickname', nickname); setIsNameSet(true); } else { showAlert("이름을 선택해 주세요.", "error"); }}} 
+                                    className="w-full bg-blue-600 text-white font-black py-4 rounded-xl shadow-lg hover:bg-blue-700 transition-all transform active:scale-95">관제 시스템 접속</button>
+                                <button onClick={() => setShowAdminEntry(true)} className="text-[10px] text-slate-300 hover:text-slate-500 uppercase">관리자 전용</button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (isAdminMode) {
+                return (
+                    <div className="max-w-xl mx-auto p-6 min-h-screen animate-fadeIn">
+                        <div className="dashboard-card p-6 border-t-8 border-slate-800 dark:text-slate-900">
+                            <div className="flex justify-between items-center mb-8 border-b pb-4">
+                                <h2 className="text-xl font-bold">관리자 콘솔</h2>
+                                <button onClick={() => setIsAdminMode(false)} className="px-4 py-1 text-sm bg-slate-100 rounded-md hover:bg-slate-200 font-bold">닫기</button>
+                            </div>
+                            <div className="space-y-6">
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-400 uppercase">시스템 공지 설정</label>
+                                    <div className="flex gap-2">
+                                        <input type="text" className="flex-1 p-2 text-sm border rounded" value={newNotice} onChange={e => setNewNotice(e.target.value)} />
+                                        <button onClick={async () => {
+                                            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { notice: newNotice });
+                                            showAlert("공지가 성공적으로 업데이트되었습니다.");
+                                        }} className="px-4 bg-slate-800 text-white text-sm rounded font-bold">저장</button>
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-400 uppercase">요원 명단 관리</label>
+                                    <div className="flex gap-2">
+                                        <input type="text" className="flex-1 p-2 text-sm border rounded" value={newMemberName} onChange={e => setNewMemberName(e.target.value)} />
+                                        <button onClick={async () => {
+                                            if(!newMemberName) return;
+                                            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'members_v24'), { name: newMemberName });
+                                            setNewMemberName("");
+                                            showAlert("신규 요원이 등록되었습니다.");
+                                        }} className="px-4 bg-blue-600 text-white text-sm rounded font-bold">추가</button>
+                                    </div>
+                                    <div className="mt-4 border rounded max-h-60 overflow-y-auto divide-y bg-white">
+                                        {members.map(m => (
+                                            <div key={m.id} className="flex justify-between p-3 text-sm items-center">
+                                                <span className="font-bold">{m.name}</span>
+                                                <button onClick={async () => { 
+                                                    setUiConfirm({
+                                                        message: `${m.name} 요원을 영구 삭제하시겠습니까?`,
+                                                        onConfirm: async () => {
+                                                            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', m.id));
+                                                            showAlert("삭제 완료");
+                                                        }
+                                                    });
+                                                }} className="text-red-500 font-bold">삭제</button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="app-container">
+                    {/* 공지 바 - 가시성 극대화 */}
+                    <div className="bg-blue-600 text-white h-14 flex items-center relative overflow-hidden border-b-2 border-blue-700 shadow-lg">
+                        <div className="px-6 bg-slate-900 font-black h-full flex items-center z-20 skew-x-[-15deg] -ml-3 text-white border-r-4 border-blue-500">
+                            <span className="skew-x-[15deg] flex items-center gap-2 text-base">
+                                <i className="fas fa-bullhorn text-yellow-400 animate-bounce"></i> 중요 공지사항
+                            </span>
+                        </div>
+                        <div className="animate-marquee whitespace-nowrap font-black text-lg opacity-100 tracking-wide pl-8 z-10">
+                            {notice} &nbsp;&nbsp;&nbsp; {notice} &nbsp;&nbsp;&nbsp; {notice}
+                        </div>
+                        <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-blue-600 to-transparent z-20"></div>
+                    </div>
+
+                    <header className="bg-white dark:bg-slate-900 p-6 border-b sticky top-0 z-30 shadow-sm">
+                        <div className="flex flex-wrap justify-between items-center gap-6">
+                            <div className="flex items-center gap-5">
+                                <button onClick={handleResetSession} className="flex flex-col items-center justify-center w-12 h-12 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-500 hover:text-red-500 transition-all shadow-sm">
+                                    <i className="fas fa-sync-alt text-sm mb-1"></i>
+                                    <span className="text-[8px] font-black uppercase tracking-tighter">초기화</span>
+                                </button>
+                                <div>
+                                    <h1 className="text-xl font-black dark:text-white tracking-tight uppercase">통합 관제 센터</h1>
+                                    <div className="flex items-center gap-2">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">인증 요원: <span className="text-blue-600 font-black">{nickname}</span></span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="flex items-center gap-4">
+                                <div className="bg-slate-900 text-white px-6 py-2 rounded-xl border border-slate-700 text-center min-w-[150px] shadow-lg">
+                                    <div className="text-[8px] text-slate-500 font-black uppercase tracking-widest">시즌 종료까지</div>
+                                    <div className="text-sm font-black tracking-widest font-mono text-yellow-400">{timeLeftStr}</div>
+                                </div>
+                                <button onClick={() => setShowAdminEntry(!showAdminEntry)} className="w-10 h-10 border dark:border-slate-700 rounded-xl flex items-center justify-center dark:text-white opacity-20 hover:opacity-100 transition-opacity"><i className="fas fa-cog"></i></button>
+                                {showAdminEntry && (
+                                    <div className="flex gap-1 animate-fadeIn">
+                                        <input type="password" placeholder="비밀번호" className="w-24 p-1 text-xs border rounded dark:text-slate-900 outline-none focus:border-blue-500" onChange={e => setAdminPass(e.target.value)} />
+                                        <button onClick={() => { if(adminPass === "1234") setIsAdminMode(true); else showAlert("인증 실패", "error"); }} className="px-2 bg-blue-600 text-white text-xs rounded font-bold">확인</button>
+                                    </div>
+                                )}
+                                <button onClick={() => setIsDarkMode(!isDarkMode)} className="w-10 h-10 border dark:border-slate-700 rounded-xl flex items-center justify-center dark:text-white hover:bg-slate-50 transition-colors shadow-sm">
+                                    <i className={`fas ${isDarkMode ? 'fa-sun' : 'fa-moon'}`}></i>
+                                </button>
+                            </div>
+                        </div>
+                        <nav className="flex gap-10 mt-6 text-[12px] lg:hidden">
+                            <button onClick={() => setActiveMenu('record')} className={`nav-link ${activeMenu === 'record' ? 'active' : ''}`}>내역 보고</button>
+                            <button onClick={() => setActiveMenu('status')} className={`nav-link ${activeMenu === 'status' ? 'active' : ''}`}>참여 지표</button>
+                            <button onClick={() => setActiveMenu('logs')} className={`nav-link ${activeMenu === 'logs' ? 'active' : ''}`}>활동 로그</button>
+                        </nav>
+                    </header>
+
+                    <main className="p-6 pb-24">
+                        <div className="desktop-layout">
+                            {/* 좌측 입력 영역 */}
+                            <section className={`${activeMenu === 'record' ? 'block' : 'hidden lg:block'} space-y-6`}>
+                                <form onSubmit={handleSubmit} className="dashboard-card p-8 space-y-8 shadow-xl border-t-4 border-blue-600 sticky top-[140px]">
+                                    <div className="flex justify-between items-center border-b pb-4 dark:border-slate-700">
+                                        <h2 className="font-black text-slate-800 dark:text-white flex items-center gap-3 uppercase tracking-tighter">
+                                            <i className="fas fa-file-export text-blue-500"></i> 작전 리포트
+                                        </h2>
+                                        <span className="text-[10px] font-black text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">버전 2.4</span>
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">01. 거점 선택</label>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            {islands.map(i => (
+                                                <button key={i.name} type="button" onClick={() => setSelectedIsland(i.name)} 
+                                                    className={`p-4 rounded-xl border-2 flex flex-col items-center gap-2 transition-all ${selectedIsland === i.name ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-600 shadow-md' : 'border-slate-50 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 text-slate-400 hover:border-slate-200'}`}>
+                                                    <i className={`fas ${i.icon} text-lg`}></i>
+                                                    <span className="font-black text-[11px] uppercase">{i.name}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">02. 목표 등급</label>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            {mobs.map(m => (
+                                                <button key={m} type="button" onClick={() => setSelectedMob(m)} 
+                                                    className={`py-3 rounded-lg border-2 text-[10px] font-black uppercase transition-all ${selectedMob === m ? 'bg-slate-800 border-slate-800 text-white' : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 text-slate-400 hover:border-slate-300 shadow-sm'}`}>
+                                                    {m}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">03. 소요 시간 기록</label>
+                                        <div className="bg-slate-900 rounded-2xl p-8 text-center shadow-inner border border-slate-800">
+                                            <div className="text-5xl font-mono font-black text-white mb-8 tracking-widest flex justify-center items-center">
+                                                {String(playMin).padStart(2, '0')}<span className="text-blue-500 mx-1">:</span>{String(playSec).padStart(2, '0')}
+                                            </div>
+                                            <div className="grid grid-cols-3 gap-2">
+                                                {[1, 10, 1].map((v, i) => (
+                                                    <button key={i} type="button" onClick={() => adjustTime(i===0?'min':'sec', v)} className="bg-white/10 text-white py-3 rounded-lg text-[10px] font-black hover:bg-white/20">+{v}{i===0?'분':'초'}</button>
+                                                ))}
+                                                {[-1, -10, -1].map((v, i) => (
+                                                    <button key={i} type="button" onClick={() => adjustTime(i===0?'min':'sec', v)} className="bg-white/5 text-red-400 py-3 rounded-lg text-[10px] font-black hover:bg-white/10">{v}{i===0?'분':'초'}</button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <button type="submit" className="w-full bg-blue-600 text-white py-5 rounded-xl font-black text-lg shadow-xl hover:bg-blue-700 active:scale-95 transition-all border-b-4 border-blue-800 uppercase tracking-widest">리포트 보고 완료</button>
+                                </form>
+                            </section>
+
+                            {/* 우측 대시보드 */}
+                            <div className="space-y-8">
+                                {/* 참여 지표 섹션 - 글자 크기 대폭 상향 */}
+                                <section className={`${activeMenu === 'status' ? 'block' : 'hidden lg:block'} animate-fadeIn`}>
+                                    <div className="flex justify-between items-center mb-6 px-2">
+                                        <h3 className="font-black text-slate-800 dark:text-white uppercase tracking-tighter flex items-center gap-2 text-base">
+                                            <i className="fas fa-chart-line text-blue-500"></i> 요원별 참여 지표 (전체 인원)
+                                        </h3>
+                                        <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">{members.length} Active Agents</span>
+                                    </div>
+                                    <div className="agent-grid">
+                                        {members.map(mDoc => {
+                                            const st = stats.playerMap[mDoc.name];
+                                            const remS = TOTAL_RESOURCES - st.swords;
+                                            return (
+                                                <div key={mDoc.id} className={`dashboard-card p-6 transition-all border-l-8 ${st.participated ? 'border-l-blue-500 shadow-md' : 'opacity-40 grayscale border-l-slate-300'} hover:scale-[1.02]`}>
+                                                    <div className="flex justify-between items-center mb-5">
+                                                        <span className="text-xl font-black dark:text-white truncate">{mDoc.name}</span>
+                                                        <span className={`text-xs font-black px-3 py-1 rounded-full shadow-sm ${remS <= 0 ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>잔여: {remS}</span>
+                                                    </div>
+                                                    <div className="space-y-3">
+                                                        <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden border border-slate-200 dark:border-slate-700">
+                                                            <div className="h-full bg-blue-500 transition-all duration-1000 shadow-[0_0_8px_rgba(37,99,235,0.4)]" style={{ width: `${(st.swords/20)*100}%` }}></div>
+                                                        </div>
+                                                        <div className="flex justify-between items-center font-black">
+                                                            <div className="flex flex-col">
+                                                                <span className="text-[10px] text-slate-400 uppercase tracking-tighter">Participation</span>
+                                                                <span className="text-sm dark:text-slate-200">{st.swords} / 20회</span>
+                                                            </div>
+                                                            <div className="flex flex-col items-end text-right border-l pl-4 border-slate-200 dark:border-slate-700">
+                                                                <span className="text-[10px] text-slate-400 uppercase tracking-tighter">Total Time</span>
+                                                                <span className="text-sm text-blue-600 dark:text-blue-400">{Math.floor(st.timeSec/60)}분 {st.timeSec%60}초</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </section>
+
+                                {/* 상세 활동 이력 로그 */}
+                                <section className={`${activeMenu === 'logs' ? 'block' : 'hidden lg:block'} animate-fadeIn`}>
+                                    <div className="dashboard-card overflow-hidden border-t-4 border-slate-800 shadow-xl">
+                                        <div className="p-4 border-b bg-slate-50 dark:bg-slate-800/50 flex justify-between items-center text-center">
+                                            <h3 className="text-xs font-black dark:text-white uppercase tracking-widest">상세 활동 기록 이력</h3>
+                                            <span className="text-[8px] font-bold text-blue-500 animate-pulse tracking-tighter uppercase">실시간 데이터 동기화 중</span>
+                                        </div>
+                                        <div className="overflow-x-auto max-h-[600px] overflow-y-auto no-scrollbar">
+                                            <table className="w-full text-[11px] text-left">
+                                                <thead className="bg-slate-50 dark:bg-slate-800 text-slate-400 uppercase font-black sticky top-0 z-10 shadow-sm border-b">
+                                                    <tr>
+                                                        <th className="px-6 py-4">기록 시각</th>
+                                                        <th className="px-6 py-4">담당 요원</th>
+                                                        <th className="px-6 py-4">대상 (등급)</th>
+                                                        <th className="px-6 py-4 text-blue-600">수행 시간</th>
+                                                        <th className="px-6 py-4 text-right">관리</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y dark:divide-slate-700">
+                                                    {logs.map(l => (
+                                                        <tr key={l.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:text-slate-300 transition-colors">
+                                                            <td className="px-6 py-4 text-slate-400 font-bold whitespace-nowrap">
+                                                                {l.timestamp ? new Date(l.timestamp.seconds * 1000).toLocaleString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : "-"}
+                                                            </td>
+                                                            <td className="px-6 py-4 font-black whitespace-nowrap">{l.nickname}</td>
+                                                            <td className="px-6 py-4 font-bold whitespace-nowrap text-slate-500 dark:text-slate-400">
+                                                                {l.island} <span className="text-[9px] px-1 bg-slate-100 dark:bg-slate-700 rounded uppercase">{l.mob}</span>
+                                                            </td>
+                                                            <td className="px-6 py-4 font-mono font-black text-blue-600 dark:text-blue-400 italic">{l.playMin}분 {l.playSec}초</td>
+                                                            <td className="px-6 py-4 text-right">
+                                                                {user && (l.uid === user.uid || isAdminMode) && (
+                                                                    <button onClick={() => handleDeleteLog(l.id)} className="text-red-400 hover:text-red-600 p-2 bg-red-50 dark:bg-red-900/10 rounded-lg transition-all shadow-sm" title="기록 영구 삭제">
+                                                                        <i className="fas fa-trash-alt"></i>
+                                                                    </button>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                    {logs.length === 0 && (
+                                                        <tr>
+                                                            <td colSpan="5" className="px-6 py-24 text-center text-slate-300 font-bold italic text-sm uppercase tracking-widest">등록된 데이터가 없습니다</td>
+                                                        </tr>
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </section>
+                            </div>
+                        </div>
+                    </main>
+
+                    {/* 하단 통합 지표 바 (PC 전용) */}
+                    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-full max-w-2xl px-4 hidden lg:block z-50 animate-fadeIn">
+                        <div className="bg-slate-900/95 backdrop-blur-md text-white px-10 py-5 rounded-2xl flex justify-between items-center shadow-2xl border border-white/10 ring-1 ring-white/10">
+                            <div className="flex flex-col">
+                                <span className="text-[9px] text-blue-400 font-black uppercase tracking-[0.2em] mb-1">식별된 요원</span>
+                                <span className="text-xl font-black">{nickname}</span>
+                            </div>
+                            <div className="h-10 w-px bg-slate-700"></div>
+                            <div className="flex flex-col text-center">
+                                <span className="text-[9px] text-indigo-400 font-black uppercase tracking-[0.2em] mb-1">누적 참여 횟수</span>
+                                <span className="text-xl font-black">{stats.playerMap[nickname]?.swords || 0} <span className="text-slate-500 font-bold text-xs">/ 20</span></span>
+                            </div>
+                            <div className="h-10 w-px bg-slate-700"></div>
+                            <div className="flex flex-col text-center">
+                                <span className="text-[9px] text-emerald-400 font-black uppercase tracking-[0.2em] mb-1">현재 성과 순위</span>
+                                <span className="text-xl font-black italic">{stats.myRank > 0 ? stats.myRank : "--"}위</span>
+                            </div>
+                            <div className="h-10 w-px bg-slate-700"></div>
+                            <button onClick={handleResetSession} className="bg-slate-800 hover:bg-red-600 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all shadow-lg border border-slate-700 tracking-widest active:scale-95 text-center">
+                                요원 변경
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* --- 시스템 알림 모달 --- */}
+                    {uiAlert && (
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn">
+                            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center border-t-4 border-blue-500">
+                                <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 ${uiAlert.type === 'error' ? 'bg-red-50 text-red-500' : 'bg-green-50 text-green-500'}`}>
+                                    <i className={`fas ${uiAlert.type === 'error' ? 'fa-times-circle' : 'fa-check-circle'} text-3xl`}></i>
+                                </div>
+                                <h3 className="text-lg font-black mb-2 dark:text-white uppercase tracking-tighter">시스템 알림</h3>
+                                <p className="text-slate-500 dark:text-slate-400 mb-8 font-bold leading-relaxed">{uiAlert.message}</p>
+                                <button onClick={closeAlert} className="w-full bg-slate-900 text-white py-3 rounded-xl font-black uppercase shadow-lg active:scale-95 transition-all tracking-widest">확인</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {uiConfirm && (
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn">
+                            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center border-t-4 border-red-500">
+                                <div className="w-16 h-16 rounded-full bg-red-50 text-red-500 flex items-center justify-center mx-auto mb-6">
+                                    <i className="fas fa-exclamation-triangle text-3xl"></i>
+                                </div>
+                                <h3 className="text-lg font-black mb-2 dark:text-white uppercase tracking-tighter">실행 확인</h3>
+                                <p className="text-slate-500 dark:text-slate-400 mb-8 font-bold leading-relaxed">{uiConfirm.message}</p>
+                                <div className="flex gap-2 text-center">
+                                    <button onClick={() => setUiConfirm(null)} className="flex-1 bg-slate-100 text-slate-600 py-3 rounded-xl font-black uppercase tracking-widest">취소</button>
+                                    <button onClick={() => { uiConfirm.onConfirm(); setUiConfirm(null); }} className="flex-1 bg-red-600 text-white py-3 rounded-xl font-black uppercase shadow-lg active:scale-95 transition-all tracking-widest text-sm">진행</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
