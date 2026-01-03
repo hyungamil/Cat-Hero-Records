@@ -43,19 +43,6 @@
             color: #f1f5f9;
         }
 
-        .nav-link {
-            padding: 0.5rem 0.25rem;
-            font-weight: 600;
-            color: #64748b;
-            border-bottom: 2px solid transparent;
-            transition: all 0.2s;
-        }
-
-        .nav-link.active {
-            color: var(--brand-primary);
-            border-bottom-color: var(--brand-primary);
-        }
-
         .no-scrollbar::-webkit-scrollbar { display: none; }
         
         @keyframes marquee {
@@ -77,12 +64,13 @@
 
         .agent-grid {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
             gap: 0.75rem;
         }
 
         @media (min-width: 768px) {
             .agent-grid {
+                grid-template-columns: repeat(2, 1fr);
                 gap: 1.25rem;
             }
         }
@@ -96,19 +84,23 @@
             }
         }
 
-        .custom-modal-overlay {
-            background-color: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(4px);
-        }
-
         .main-tab-active {
             background-color: var(--brand-primary);
             color: white;
             box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
         }
 
-        .notice-glow {
-            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5), 0 0 5px rgba(255, 255, 0, 0.3);
+        .custom-modal-overlay {
+            background-color: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(8px);
+        }
+
+        @keyframes slideUpFade {
+            0% { transform: translateY(10px); opacity: 0; }
+            100% { transform: translateY(0); opacity: 1; }
+        }
+        .log-animate {
+            animation: slideUpFade 0.5s ease-out forwards;
         }
     </style>
 </head>
@@ -117,10 +109,9 @@
 
     <script type="text/babel" data-type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp, deleteDoc, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp, deleteDoc, doc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Firebase 설정
         const firebaseConfig = {
             apiKey: "AIzaSyCOt_5hYk7Y9EDwo1Cd55et5-JT6k7LIcc",
             authDomain: "cat-hero-record.firebaseapp.com",
@@ -150,77 +141,33 @@
         const mobs = ['일반몹', '보스'];
 
         const TITLES_LIST = [
-            { id: 1, name: "라임의 새싹", condition: (s) => s.score >= 0 },
-            { id: 2, name: "견습 요원", condition: (s) => s.score >= 50 },
-            { id: 3, name: "정식 요원", condition: (s) => s.score >= 100 },
-            { id: 4, name: "베테랑", condition: (s) => s.score >= 200 },
-            { id: 5, name: "에이스", condition: (s) => s.score >= 400 },
-            { id: 6, name: "정예 요원", condition: (s) => s.score >= 600 },
-            { id: 7, name: "전설의 요원", condition: (s) => s.score >= 800 },
-            { id: 8, name: "라임의 수호자", condition: (s) => s.score >= 1000 },
-            { id: 9, name: "불멸의 전사", condition: (s) => s.score >= 1500 },
-            { id: 10, name: "라임의 태양", condition: (s) => s.score >= 2000 },
-            { id: 11, name: "균격 입문자", condition: (s) => s.conquestCount >= 5 },
-            { id: 12, name: "균격 수색대", condition: (s) => s.conquestCount >= 10 },
-            { id: 13, name: "균격 전문가", condition: (s) => s.conquestCount >= 20 },
-            { id: 14, name: "공간 절단자", condition: (s) => s.conquestCount >= 40 },
-            { id: 15, name: "차원의 벽", condition: (s) => s.conquestCount >= 60 },
-            { id: 16, name: "균격 마스터", condition: (s) => s.conquestCount >= 80 },
-            { id: 17, name: "차원 파괴자", condition: (s) => s.conquestCount >= 100 },
-            { id: 18, name: "균격의 화신", condition: (s) => s.conquestCount >= 150 },
-            { id: 19, name: "절대적 균격자", condition: (s) => s.conquestCount >= 200 },
-            { id: 20, name: "차원의 군주", condition: (s) => s.conquestCount >= 300 },
-            { id: 21, name: "레이드 개척자", condition: (s) => s.raidMonth >= 5 },
-            { id: 22, name: "열쇠 소지자", condition: (s) => s.raidMonth >= 10 },
-            { id: 23, name: "심연의 탐험가", condition: (s) => s.raidMonth >= 20 },
-            { id: 24, name: "크툴루 추격자", condition: (s) => s.raidMonth >= 30 },
-            { id: 25, name: "열쇠 수집가", condition: (s) => s.raidMonth >= 40 },
-            { id: 26, name: "레이드 전문가", condition: (s) => s.raidMonth >= 50 },
-            { id: 27, name: "심연의 정복자", condition: (s) => s.raidMonth >= 60 },
-            { id: 28, name: "크툴루 슬레이어", condition: (s) => s.raidMonth >= 80 },
-            { id: 29, name: "레이드의 영웅", condition: (s) => s.raidMonth >= 100 },
-            { id: 30, name: "열쇠의 성자", condition: (s) => s.raidMonth >= 150 },
-            { id: 31, name: "신속한 요원", condition: (s) => s.avgTime < 120 && s.conquestCount > 5 },
-            { id: 32, name: "바람의 타격가", condition: (s) => s.avgTime < 90 && s.conquestCount > 10 },
-            { id: 33, name: "전광석화", condition: (s) => s.avgTime < 60 && s.conquestCount > 20 },
-            { id: 34, name: "빛의 속도", condition: (s) => s.avgTime < 45 && s.conquestCount > 30 },
-            { id: 35, name: "시간의 지배자", condition: (s) => s.avgTime < 30 && s.conquestCount > 50 },
-            { id: 36, name: "성실한 일꾼", condition: (s) => s.raidToday >= 2 },
-            { id: 37, name: "노력의 천재", condition: (s) => s.score > 300 && s.avgTime > 150 },
-            { id: 38, name: "분위기 메이커", condition: (s) => s.raidToday >= 1 && s.conquestCount >= 1 },
-            { id: 39, name: "라임의 기둥", condition: (s) => s.score > 1200 },
-            { id: 40, name: "완벽주의자", condition: (s) => s.conquestCount >= 20 && s.raidToday >= 2 },
-            { id: 41, name: "명예의 요원", condition: (s) => s.isMyRankTop3 },
-            { id: 42, name: "주간 랭커", condition: (s) => s.isWeeklyTop },
-            { id: 43, name: "시즌 MVP", condition: (s) => s.isSeasonTop },
-            { id: 44, name: "라임의 자랑", condition: (s) => s.score > 2500 },
-            { id: 45, name: "최고 기여도", condition: (s) => s.isMyRank1 },
-            { id: 46, name: "전략 사령관", condition: (s) => s.score > 500 && s.conquestCount > 50 },
-            { id: 47, name: "무적의 기사", condition: (s) => s.raidMonth > 100 },
-            { id: 48, name: "영광의 얼굴", condition: (s) => s.score > 3000 },
-            { id: 49, name: "길드의 자부심", condition: (s) => s.score > 5000 },
-            { id: 50, name: "라임의 신", condition: (s) => s.score > 10000 },
+            { id: 1, name: "라임의 새싹", score: 0 },
+            { id: 2, name: "견습 길드원", score: 50 },
+            { id: 3, name: "정식 길드원", score: 100 },
+            { id: 4, name: "베테랑", score: 200 },
+            { id: 5, name: "에이스", score: 400 },
+            { id: 6, name: "정예 길드원", score: 600 },
+            { id: 7, name: "전설의 길드원", score: 800 },
+            { id: 8, name: "라임의 수호자", score: 1000 },
+            { id: 9, name: "불멸의 전사", score: 1500 },
+            { id: 10, name: "라임의 태양", score: 2000 },
+            { id: 11, name: "길드의 자부심", score: 5000 },
+            { id: 12, name: "라임의 신", score: 10000 },
         ];
 
         function App() {
-            // -- 상태 관리 --
             const [user, setUser] = useState(null);
-            const [authLoading, setAuthLoading] = useState(true);
             const [nickname, setNickname] = useState(localStorage.getItem('cat_hero_nickname') || '');
             const [isNameSet, setIsNameSet] = useState(!!localStorage.getItem('cat_hero_nickname'));
             const [isAdminMode, setIsAdminMode] = useState(false);
             const [adminPass, setAdminPass] = useState("");
             const [showAdminEntry, setShowAdminEntry] = useState(false);
             const [isDarkMode, setIsDarkMode] = useState(localStorage.getItem('isDarkMode') === 'true');
-            
             const [mainCategory, setMainCategory] = useState('conquest');
-            const [activeMenu, setActiveMenu] = useState('record');
-            
             const [selectedIsland, setSelectedIsland] = useState('해적');
             const [selectedMob, setSelectedMob] = useState('일반몹');
             const [playMin, setPlayMin] = useState(0);
             const [playSec, setPlaySec] = useState(0);
-            
             const [logs, setLogs] = useState([]);
             const [raidLogs, setRaidLogs] = useState([]);
             const [members, setMembers] = useState([]);
@@ -228,14 +175,12 @@
             const [newNotice, setNewNotice] = useState("");
             const [newMemberName, setNewMemberName] = useState("");
             const [timeLeftStr, setTimeLeftStr] = useState("");
-
             const [uiAlert, setUiAlert] = useState(null);
             const [uiConfirm, setUiConfirm] = useState(null);
 
             const showAlert = (msg, type = 'success') => setUiAlert({ message: msg, type });
             const closeAlert = () => setUiAlert(null);
 
-            // -- 시스템 로직 --
             useEffect(() => {
                 if (isDarkMode) document.documentElement.classList.add('dark');
                 else document.documentElement.classList.remove('dark');
@@ -251,7 +196,7 @@
                     const daysUntilMonday = (1 + 7 - day) % 7 || 7;
                     target.setDate(now.getDate() + daysUntilMonday);
                     const diff = target - now;
-                    if (diff <= 0) setTimeLeftStr("시즌 종료");
+                    if (diff <= 0) setTimeLeftStr("종료됨");
                     else {
                         const d = Math.floor(diff / 86400000);
                         const h = Math.floor((diff % 86400000) / 3600000);
@@ -268,7 +213,6 @@
             useEffect(() => {
                 const initAuth = async () => {
                     try { await signInAnonymously(auth); } catch (e) { console.error(e); } 
-                    finally { setAuthLoading(false); }
                 };
                 initAuth();
                 const unsubscribe = onAuthStateChanged(auth, setUser);
@@ -296,31 +240,23 @@
                 return () => { unsubMembers(); unsubLogs(); unsubRaidLogs(); unsubSettings(); };
             }, [user]);
 
-            // -- 명예 및 통계 데이터 연산 --
             const rankingData = useMemo(() => {
                 const now = new Date();
-                const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                const day = now.getDay();
-                const diffWeek = now.getDate() - day + (day === 0 ? -6 : 1);
-                const weekStart = new Date(now.setDate(diffWeek));
-                weekStart.setHours(0, 0, 0, 0);
                 const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+                const weekStart = new Date();
+                weekStart.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+                weekStart.setHours(0, 0, 0, 0);
 
                 const getScores = (startTime) => {
                     const playerMap = {};
-                    members.forEach(m => playerMap[m.name] = { score: 0, conquestCount: 0, raidCount: 0, totalTime: 0, lastActive: null });
-
+                    members.forEach(m => playerMap[m.name] = { score: 0, conquestCount: 0, raidCount: 0 });
                     logs.forEach(log => {
                         const logDate = log.timestamp?.seconds ? new Date(log.timestamp.seconds * 1000) : new Date();
                         if (logDate >= startTime && playerMap[log.nickname]) {
                             playerMap[log.nickname].score += 5;
                             playerMap[log.nickname].conquestCount += 1;
-                            playerMap[log.nickname].totalTime += (Number(log.playMin || 0) * 60 + Number(log.playSec || 0));
-                            const ts = log.timestamp?.seconds;
-                            if (ts && (!playerMap[log.nickname].lastActive || ts > playerMap[log.nickname].lastActive)) playerMap[log.nickname].lastActive = ts;
                         }
                     });
-
                     raidLogs.forEach(log => {
                         const logDate = log.timestamp?.seconds ? new Date(log.timestamp.seconds * 1000) : new Date();
                         if (logDate >= startTime && playerMap[log.nickname]) {
@@ -329,78 +265,44 @@
                             playerMap[log.nickname].raidCount += keys;
                         }
                     });
-
-                    return Object.entries(playerMap)
-                        .map(([name, data]) => ({ name, ...data }))
-                        .sort((a, b) => b.score - a.score);
+                    return Object.entries(playerMap).map(([name, data]) => ({ name, ...data })).sort((a, b) => b.score - a.score);
                 };
 
                 const weekly = getScores(weekStart);
                 const season = getScores(monthStart);
+                const raidRankings = [...season].sort((a, b) => b.raidCount - a.raidCount || b.score - a.score);
 
-                const getTitle = (name) => {
-                    const wIdx = weekly.findIndex(r => r.name === name);
-                    const sIdx = season.findIndex(r => r.name === name);
-                    const pData = season.find(r => r.name === name);
-                    const tData = getScores(todayStart).find(r => r.name === name);
-
-                    const context = {
-                        score: pData?.score || 0,
-                        conquestCount: pData?.conquestCount || 0,
-                        raidMonth: pData?.raidCount || 0,
-                        raidToday: tData?.raidCount || 0,
-                        avgTime: pData?.conquestCount > 0 ? pData.totalTime / pData.conquestCount : 9999,
-                        isWeeklyTop: weekly.findIndex(r => r.name === name) === 0,
-                        isSeasonTop: sIdx === 0,
-                        isMyRankTop3: sIdx >= 0 && sIdx < 3,
-                        isMyRank1: sIdx === 0
-                    };
-                    const earned = TITLES_LIST.filter(t => t.condition(context)).reverse();
-                    return earned.length > 0 ? earned[0].name : "라임의 새싹";
+                const getPersonalStatus = (name) => {
+                    const data = season.find(r => r.name === name) || { score: 0, raidCount: 0 };
+                    const currentTitle = [...TITLES_LIST].reverse().find(t => data.score >= t.score) || TITLES_LIST[0];
+                    const nextTitle = TITLES_LIST.find(t => t.score > data.score);
+                    const raidRankIdx = raidRankings.findIndex(r => r.name === name);
+                    return { currentTitle, nextTitle, score: data.score, raidRank: raidRankIdx + 1, raidCount: data.raidCount };
                 };
-
-                return { weekly, season, getTitle };
+                return { weekly, season, raidRankings, getPersonalStatus };
             }, [logs, raidLogs, members]);
 
             const stats = useMemo(() => {
                 const playerMap = {};
-                members.forEach(m => playerMap[m.name] = { swords: 0, totalInputTimeSec: 0, bossTimeSec: 0, raidToday: 0, raidMonth: 0, participated: false });
+                members.forEach(m => playerMap[m.name] = { swords: 0, totalInputTimeSec: 0, bossTimeSec: 0, raidToday: 0 });
                 logs.forEach(l => { 
                     if (playerMap[l.nickname]) { 
                         playerMap[l.nickname].swords += 1; 
                         const duration = (Number(l.playMin || 0) * 60 + Number(l.playSec || 0));
                         if (l.mob === '보스') playerMap[l.nickname].bossTimeSec += duration;
                         else playerMap[l.nickname].totalInputTimeSec += duration;
-                        playerMap[l.nickname].participated = true;
                     } 
                 });
                 const todayStart = new Date(); todayStart.setHours(0,0,0,0);
-                const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
                 raidLogs.forEach(l => { 
-                    if (playerMap[l.nickname]) { 
-                        const ld = l.timestamp?.seconds ? new Date(l.timestamp.seconds * 1000) : new Date(); 
-                        if (ld >= todayStart) playerMap[l.nickname].raidToday += Number(l.keysUsed || 0); 
-                        if (ld >= monthStart) playerMap[l.nickname].raidMonth += Number(l.keysUsed || 0); 
-                    } 
+                    const ld = l.timestamp?.seconds ? new Date(l.timestamp.seconds * 1000) : new Date(); 
+                    if (ld >= todayStart && playerMap[l.nickname]) playerMap[l.nickname].raidToday += Number(l.keysUsed || 0); 
                 });
-                const ranking = Object.entries(playerMap)
-                    .filter(([_, data]) => data.participated)
-                    .sort((a, b) => b[1].swords - a[1].swords || b[1].totalInputTimeSec - a[1].totalInputTimeSec);
+                return { playerMap };
+            }, [logs, raidLogs, members]);
 
-                return { playerMap, myRank: ranking.findIndex(r => r[0] === nickname) + 1 };
-            }, [logs, raidLogs, members, nickname]);
-
-            // -- 핸들러 --
             const handleResetSession = () => {
-                setUiConfirm({
-                    message: "요원 정보를 초기화하고 이름 선택 화면으로 돌아가시겠습니까?",
-                    onConfirm: () => {
-                        localStorage.removeItem('cat_hero_nickname');
-                        setNickname('');
-                        setIsNameSet(false);
-                        window.location.reload();
-                    }
-                });
+                setUiConfirm({ message: "길드원 정보를 초기화하고 이름 선택 화면으로 돌아가시겠습니까?", onConfirm: () => { localStorage.removeItem('cat_hero_nickname'); setNickname(''); setIsNameSet(false); window.location.reload(); } });
             };
 
             const handleSubmitConquest = async (e) => {
@@ -408,43 +310,37 @@
                 if (!nickname || (playMin === 0 && playSec === 0)) return;
                 const currentSwords = stats.playerMap[nickname]?.swords || 0;
                 if (currentSwords >= TOTAL_RESOURCES) return showAlert(`한도(${TOTAL_RESOURCES}회) 초과`, "error");
-
                 try {
-                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24'), {
-                        nickname, island: selectedIsland, mob: selectedMob,
-                        playMin: Number(playMin), playSec: Number(playSec),
-                        timestamp: serverTimestamp(), uid: user.uid
-                    });
-                    setPlayMin(0); setPlaySec(0);
-                    showAlert("작전 보고 전송 완료.");
-                } catch (err) { showAlert("전송 실패: " + err.message, "error"); }
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24'), { nickname, island: selectedIsland, mob: selectedMob, playMin: Number(playMin), playSec: Number(playSec), timestamp: serverTimestamp(), uid: user.uid });
+                    setPlayMin(0); setPlaySec(0); showAlert("작전 보고 완료.");
+                } catch (err) { showAlert("전송 실패", "error"); }
             };
 
             const handleSubmitRaid = async (keys) => {
                 try {
-                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'raid_logs_v24'), {
-                        nickname, keysUsed: keys,
-                        timestamp: serverTimestamp(), uid: user.uid
-                    });
-                    showAlert(`열쇠 ${keys}개 소모 보고됨.`);
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'raid_logs_v24'), { nickname, keysUsed: keys, timestamp: serverTimestamp(), uid: user.uid });
+                    showAlert(`${keys}개 보고 완료.`);
                 } catch (err) { showAlert("실패", "error"); }
             };
 
             const handleReduceRaid = async () => {
                 const today = new Date(); today.setHours(0, 0, 0, 0);
-                const myLogs = raidLogs.filter(l => l.nickname === nickname && (l.timestamp?.seconds ? new Date(l.timestamp.seconds * 1000) : new Date()) >= today)
-                    .sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+                const myLogs = raidLogs.filter(l => l.nickname === nickname && (l.timestamp?.seconds ? new Date(l.timestamp.seconds * 1000) : new Date()) >= today).sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
                 if (myLogs.length > 0) { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'raid_logs_v24', myLogs[0].id)); showAlert("취소됨"); }
             };
 
             const handleResetRaid = async () => {
                 const today = new Date(); today.setHours(0, 0, 0, 0);
                 const myLogs = raidLogs.filter(l => l.nickname === nickname && (l.timestamp?.seconds ? new Date(l.timestamp.seconds * 1000) : new Date()) >= today);
-                setUiConfirm({ message: "오늘의 기록을 모두 지우시겠습니까?", onConfirm: async () => { for (const l of myLogs) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'raid_logs_v24', l.id)); showAlert("초기화 완료"); } });
+                setUiConfirm({ message: "기록을 초기화하시겠습니까?", onConfirm: async () => { for (const l of myLogs) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'raid_logs_v24', l.id)); showAlert("초기화 완료"); } });
             };
 
             const handleAdminResetAllRaid = async () => {
-                setUiConfirm({ message: "길드 전체 인원의 데이터를 일괄 삭제하시겠습니까?", onConfirm: async () => { for (const l of raidLogs) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'raid_logs_v24', l.id)); showAlert("일괄 삭제 완료"); } });
+                setUiConfirm({ message: "레이드 전체 데이터를 삭제합니까?", onConfirm: async () => { for (const l of raidLogs) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'raid_logs_v24', l.id)); showAlert("완료"); } });
+            };
+
+            const handleAdminResetAllConquest = async () => {
+                setUiConfirm({ message: "균격 전체 데이터를 삭제합니까?", onConfirm: async () => { for (const l of logs) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24', l.id)); showAlert("완료"); } });
             };
 
             const adjustTime = (type, val) => {
@@ -452,92 +348,97 @@
                 else setPlaySec(p => (p + val >= 60 ? (setPlayMin(m => m + 1), p + val - 60) : Math.max(0, p + val)));
             };
 
+            const latestLog = logs[0] || null;
+            const myStatus = rankingData.getPersonalStatus(nickname);
+
             // -- 렌더링 섹션 --
             if (!isNameSet && !isAdminMode) {
                 return (
-                    <div className="min-h-screen flex items-center justify-center p-4 bg-slate-200 text-slate-900 font-bold">
-                        <div className="dashboard-card p-12 w-full max-w-sm text-center shadow-2xl border-t-8 border-blue-600 animate-fadeIn">
+                    <div className="min-h-screen flex items-center justify-center p-4 bg-slate-200">
+                        <div className="dashboard-card p-10 md:p-12 w-full max-w-sm text-center shadow-2xl border-t-8 border-blue-600 animate-fadeIn font-bold">
                             <h1 className="text-2xl font-black text-blue-600 mb-1 uppercase italic font-['Orbitron']">LIME HQ</h1>
                             <p className="text-[10px] text-slate-400 mb-10 font-bold uppercase tracking-[0.2em]">Personnel Verification</p>
                             <div className="space-y-6 text-left">
-                                <label className="text-[11px] font-black text-slate-500 uppercase ml-1 mb-2 block">요원 인증</label>
-                                <select className="w-full p-4 bg-slate-50 border-2 border-slate-200 focus:border-blue-500 outline-none rounded-xl font-bold font-black" 
-                                    value={nickname} onChange={e => setNickname(e.target.value)}>
+                                <label className="text-[11px] font-black text-slate-500 uppercase ml-1 mb-2 block font-bold">길드원 인증</label>
+                                <select className="w-full p-4 bg-slate-50 border-2 border-slate-200 focus:border-blue-500 outline-none rounded-xl font-bold font-black text-slate-900" value={nickname} onChange={e => setNickname(e.target.value)}>
                                     <option value="">본인 성명을 선택하십시오</option>
                                     {members.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
                                 </select>
-                                <button onClick={() => { if(nickname) { localStorage.setItem('cat_hero_nickname', nickname); setIsNameSet(true); } }} 
-                                    className="w-full bg-blue-600 text-white font-black py-4 rounded-xl shadow-lg hover:bg-blue-700 transition-all active:scale-95 font-black">대시보드 접속</button>
-                                <button onClick={() => setShowAdminEntry(!showAdminEntry)} className="w-full text-center text-[9px] text-slate-300 font-bold uppercase mt-4">Administrator Portal</button>
-                                {showAdminEntry && (
-                                    <div className="flex gap-1 mt-2 animate-fadeIn font-black">
-                                        <input type="password" placeholder="Passkey" className="flex-1 p-2 border rounded-lg outline-none focus:border-blue-500 font-black text-slate-900" onChange={e => setAdminPass(e.target.value)} />
-                                        <button onClick={() => { if(adminPass === "123456") setIsAdminMode(true); else showAlert("오류", "error"); }} className="px-4 bg-slate-800 text-white text-xs rounded-lg font-bold font-black">확인</button>
-                                    </div>
-                                )}
+                                <button onClick={() => { if(nickname) { localStorage.setItem('cat_hero_nickname', nickname); setIsNameSet(true); } }} className="w-full bg-blue-600 text-white font-black py-4 rounded-xl shadow-lg hover:bg-blue-700 active:scale-95 transition-all">대시보드 접속</button>
+                                <button onClick={() => setShowAdminEntry(true)} className="w-full text-center text-[9px] text-slate-400 font-bold uppercase mt-6">Administrator Portal</button>
                             </div>
                         </div>
+
+                        {showAdminEntry && (
+                            <div className="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fadeIn">
+                                <div className="bg-white dark:bg-slate-800 dashboard-card p-8 w-full max-w-[320px] border-t-8 border-blue-600 shadow-2xl">
+                                    <div className="mb-6 text-center">
+                                        <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-1 font-black">보안 인증</p>
+                                        <h3 className="text-lg font-black dark:text-white">관리자 코드 입력</h3>
+                                    </div>
+                                    <div className="flex flex-col gap-4">
+                                        <input type="password" autoFocus placeholder="Passkey" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-4 text-center text-xl outline-none focus:border-blue-500 text-slate-900 dark:text-white font-black tracking-widest" value={adminPass} onChange={e => setAdminPass(e.target.value)} onKeyDown={e => { if(e.key === 'Enter' && adminPass === "123456") { setIsAdminMode(true); setShowAdminEntry(false); setAdminPass(""); } }} />
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <button onClick={() => { setShowAdminEntry(false); setAdminPass(""); }} className="py-3 bg-slate-100 dark:bg-slate-700 text-slate-600 rounded-xl font-bold text-sm">취소</button>
+                                            <button onClick={() => { if(adminPass === "123456") { setIsAdminMode(true); setShowAdminEntry(false); setAdminPass(""); } else { showAlert("비밀번호 오류", "error"); } }} className="py-3 bg-blue-600 text-white rounded-xl font-bold text-sm shadow-lg">인증</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 );
             }
 
             if (isAdminMode) {
                 return (
-                    <div className="max-w-4xl mx-auto p-4 md:p-8 min-h-screen animate-fadeIn text-slate-900 font-bold font-black">
-                        <div className="dashboard-card p-8 border-t-8 border-slate-800 shadow-2xl font-black">
-                            <div className="flex justify-between items-center mb-10 border-b pb-6 text-slate-900 font-black">
-                                <div className="flex items-center gap-3 font-black">
-                                    <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-800 font-black"><i className="fas fa-shield-alt text-xl font-black"></i></div>
-                                    <h2 className="text-2xl font-black italic font-black">관리 센터</h2>
+                    <div className="fixed inset-0 z-[400] overflow-y-auto bg-slate-100 dark:bg-slate-950 p-4 md:p-8 animate-fadeIn text-slate-900 font-bold">
+                        <div className="max-w-4xl mx-auto dashboard-card p-6 md:p-8 border-t-8 border-slate-800 shadow-2xl">
+                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4 border-b pb-6 text-slate-900">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-slate-800 font-bold"><i className="fas fa-shield-alt"></i></div>
+                                    <h2 className="text-xl md:text-2xl font-black italic">관리 센터</h2>
                                 </div>
-                                <button onClick={() => { setIsAdminMode(false); setShowAdminEntry(false); }} className="px-6 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl font-black shadow-sm transition-all uppercase text-xs tracking-widest text-slate-900 font-black">닫기</button>
+                                <button onClick={() => { setIsAdminMode(false); }} className="w-full md:w-auto px-6 py-2.5 bg-slate-100 hover:bg-slate-200 rounded-xl font-black shadow-sm text-slate-900 uppercase text-xs">나가기</button>
                             </div>
-                            
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 font-black">
-                                <div className="space-y-10 font-black">
-                                    <section className="font-black">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 block font-black">공지사항 즉시 송출</label>
-                                        <div className="flex gap-2 font-black font-black">
-                                            <input type="text" className="flex-1 p-3 border-2 border-slate-100 rounded-xl outline-none focus:border-blue-500 font-bold text-sm text-slate-900 font-black" value={newNotice} onChange={e => setNewNotice(e.target.value)} placeholder="실시간 공지를 입력하세요." />
-                                            <button onClick={async () => { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { notice: newNotice }); showAlert("반영됨"); }} className="px-6 bg-blue-600 text-white rounded-xl font-black shadow-lg hover:bg-blue-700 font-black font-black font-black">송출</button>
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                <div className="space-y-8 font-black">
+                                    <section>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block">공지사항 즉시 송출</label>
+                                        <div className="flex gap-2">
+                                            <input type="text" className="flex-1 p-3 border-2 border-slate-100 rounded-xl outline-none focus:border-blue-500 font-bold text-sm text-slate-900 font-black" value={newNotice} onChange={e => setNewNotice(e.target.value)} placeholder="실시간 공지 입력" />
+                                            <button onClick={async () => { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { notice: newNotice }); showAlert("반영됨"); }} className="px-5 bg-blue-600 text-white rounded-xl font-black shadow-lg">송출</button>
                                         </div>
                                     </section>
-                                    
-                                    <section className="font-black">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 block font-black">운영 도구</label>
-                                        <div className="grid grid-cols-2 gap-4 font-black">
+                                    <section>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block">데이터 관리 도구</label>
+                                        <div className="flex flex-col gap-3 font-black">
                                             <button onClick={() => {
-                                                let text = `[라임길드 현황 요약 - ${new Date().toLocaleDateString()}]\n\n`;
-                                                text += `■ 균격 미참여자:\n`;
+                                                let text = `[라임길드 현황 요약]\n\n■ 균격 미참여자:\n`;
                                                 members.forEach(m => { if ((stats.playerMap[m.name]?.swords || 0) === 0) text += `- ${m.name}\n`; });
                                                 text += `\n■ 레이드 미참여자:\n`;
                                                 members.forEach(m => { if ((stats.playerMap[m.name]?.raidToday || 0) === 0) text += `- ${m.name}\n`; });
                                                 const textArea = document.createElement("textarea"); textArea.value = text; document.body.appendChild(textArea); textArea.select(); document.execCommand('copy'); document.body.removeChild(textArea);
                                                 showAlert("명단이 복사되었습니다.");
-                                            }} className="flex items-center justify-center gap-2 p-4 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl hover:bg-slate-100 transition-all font-black text-slate-900 text-xs uppercase font-black">
-                                                <i className="fas fa-copy text-slate-400 font-black"></i> 미참여자 명단 복사
-                                            </button>
-                                            <button onClick={handleAdminResetAllRaid} className="flex items-center justify-center gap-2 p-4 bg-red-50 border-2 border-red-100 rounded-2xl text-red-600 hover:bg-red-100 transition-all font-black text-xs uppercase font-black">
-                                                <i className="fas fa-trash-alt font-black"></i> 레이드 전체 초기화
-                                            </button>
+                                            }} className="w-full flex items-center justify-center gap-2 p-4 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl font-black text-slate-900 text-xs uppercase font-black"><i className="fas fa-copy text-slate-400"></i> 미참여자 명단 복사</button>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <button onClick={handleAdminResetAllConquest} className="p-4 bg-blue-50 border-2 border-blue-100 rounded-2xl text-blue-600 font-black text-xs uppercase hover:bg-blue-100 font-black font-black">균격 초기화</button>
+                                                <button onClick={handleAdminResetAllRaid} className="p-4 bg-red-50 border-2 border-red-100 rounded-2xl text-red-600 font-black text-xs uppercase hover:bg-red-100 font-black font-black">레이드 초기화</button>
+                                            </div>
                                         </div>
                                     </section>
                                 </div>
-
                                 <section className="font-black">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 block font-black">요원 명단 관리 ({members.length})</label>
-                                    <div className="flex gap-2 mb-6 font-black font-black">
-                                        <input type="text" className="flex-1 p-2 border-2 border-slate-100 rounded-xl outline-none focus:border-blue-500 font-bold text-slate-900 font-black" value={newMemberName} onChange={e => setNewMemberName(e.target.value)} placeholder="신입 요원 성함" />
-                                        <button onClick={async () => { if(!newMemberName) return; await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'members_v24'), { name: newMemberName }); setNewMemberName(""); showAlert("등록됨"); }} className="px-5 bg-slate-800 text-white rounded-xl font-bold font-black font-black">추가</button>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block font-black">인원 명단 관리 ({members.length})</label>
+                                    <div className="flex gap-2 mb-4 font-black">
+                                        <input type="text" className="flex-1 p-2.5 border-2 border-slate-100 rounded-xl outline-none focus:border-blue-500 font-bold text-slate-900 text-sm font-black" value={newMemberName} onChange={e => setNewMemberName(e.target.value)} placeholder="이름 입력" />
+                                        <button onClick={async () => { if(!newMemberName) return; await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'members_v24'), { name: newMemberName }); setNewMemberName(""); showAlert("추가됨"); }} className="px-5 bg-slate-800 text-white rounded-xl font-bold font-black font-black">추가</button>
                                     </div>
-                                    <div className="max-h-[300px] overflow-y-auto divide-y border-2 border-slate-100 rounded-2xl bg-white shadow-inner no-scrollbar font-black">
+                                    <div className="max-h-[300px] overflow-y-auto divide-y border-2 border-slate-100 rounded-2xl bg-white shadow-inner no-scrollbar">
                                         {members.map(m => (
-                                            <div key={m.id} className="flex justify-between p-4 text-sm items-center hover:bg-slate-50 transition-colors font-black text-slate-900 font-black">
-                                                <div className="flex items-center gap-3 font-black">
-                                                    <span className="w-2 h-2 rounded-full bg-blue-500 font-black"></span>
-                                                    <span className="font-bold font-black">{m.name}</span>
-                                                </div>
-                                                <button onClick={async () => { setUiConfirm({ message: `${m.name} 요원을 제명하시겠습니까?`, onConfirm: async () => { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', m.id)); showAlert("삭제됨"); } }); }} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-all font-black font-black">제거</button>
+                                            <div key={m.id} className="flex justify-between p-4 text-sm items-center hover:bg-slate-50 transition-colors text-slate-900 font-black">
+                                                <div className="flex items-center gap-3 font-black"><span className="w-2 h-2 rounded-full bg-blue-500 font-black"></span><span className="font-bold font-black">{m.name}</span></div>
+                                                <button onClick={async () => { setUiConfirm({ message: `${m.name} 님을 삭제합니까?`, onConfirm: async () => { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', m.id)); showAlert("완료"); } }); }} className="text-red-500 p-2 font-black font-black font-black"><i className="fas fa-trash"></i></button>
                                             </div>
                                         ))}
                                     </div>
@@ -551,99 +452,117 @@
             return (
                 <div className="app-container">
                     <div className="bg-slate-900 text-white h-10 flex items-center relative overflow-hidden border-b-2 border-blue-500/40">
-                        <div className="px-4 bg-blue-600 font-black h-full flex items-center z-20 skew-x-[-15deg] -ml-3 text-white border-r-4 border-blue-400 shadow-xl">
-                            <span className="skew-x-[15deg] text-[10px] tracking-widest italic font-['Orbitron'] uppercase">공지</span>
+                        <div className="px-3 bg-blue-600 font-black h-full flex items-center z-20 skew-x-[-15deg] -ml-3 text-white border-r-4 border-blue-400 shadow-xl font-black">
+                            <span className="skew-x-[15deg] text-[10px] tracking-widest italic font-['Orbitron'] uppercase font-black">공지</span>
                         </div>
-                        <div className="animate-marquee whitespace-nowrap font-bold text-sm opacity-100 tracking-wide pl-8 z-10 notice-glow">
+                        <div className="animate-marquee whitespace-nowrap font-bold text-xs md:text-sm opacity-100 tracking-wide pl-8 z-10 notice-glow font-black">
                             {notice} &nbsp;&nbsp;&nbsp; {notice} &nbsp;&nbsp;&nbsp; {notice}
                         </div>
                         <div className="absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-slate-900 to-transparent z-20"></div>
                     </div>
 
-                    <header className="bg-white dark:bg-slate-900 p-5 md:p-7 border-b-2 border-slate-100 dark:border-slate-800 sticky top-0 z-30 shadow-sm text-slate-900 dark:text-white font-bold font-black">
-                        <div className="flex flex-wrap justify-between items-center gap-4">
-                            <div className="flex items-center gap-4">
-                                <button onClick={handleResetSession} className="flex flex-col items-center justify-center w-12 h-12 bg-slate-50 dark:bg-slate-800 border border-slate-200 rounded-2xl text-slate-500 hover:text-red-500 transition-all shadow-sm">
-                                    <i className="fas fa-power-off text-lg font-black"></i>
-                                    <span className="text-[7px] font-black uppercase mt-0.5 tracking-tighter">종료</span>
+                    <header className="bg-white dark:bg-slate-900 p-4 border-b-2 border-slate-100 dark:border-slate-800 sticky top-0 z-30 shadow-sm text-slate-900 dark:text-white font-black font-black">
+                        <div className="flex justify-between items-center gap-4 font-black">
+                            <div className="flex items-center gap-2 md:gap-3 font-black">
+                                <button onClick={handleResetSession} className="w-10 h-10 bg-slate-50 dark:bg-slate-800 border border-slate-200 rounded-xl text-slate-500 hover:text-red-500 transition-all shadow-sm flex items-center justify-center font-bold font-black">
+                                    <i className="fas fa-power-off"></i>
                                 </button>
-                                <div>
-                                    <div className="flex gap-2 font-black font-black">
-                                        <button onClick={() => setMainCategory('conquest')} className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${mainCategory === 'conquest' ? 'main-tab-active shadow-[0_0_15px_rgba(37,99,235,0.3)]' : 'bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-slate-600'}`}>01. 균격 관리</button>
-                                        <button onClick={() => setMainCategory('raid')} className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${mainCategory === 'raid' ? 'main-tab-active shadow-[0_0_15px_rgba(37,99,235,0.3)]' : 'bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-slate-600'}`}>02. 길드 레이드</button>
-                                        <button onClick={() => setMainCategory('ranking')} className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${mainCategory === 'ranking' ? 'main-tab-active bg-yellow-500 border-yellow-600 text-white' : 'bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-slate-600'}`}>03. 명예의 전당</button>
+                                <div className="space-y-1 font-black">
+                                    <div className="flex gap-1 md:gap-2 overflow-x-auto no-scrollbar pb-1 font-black">
+                                        <button onClick={() => setMainCategory('conquest')} className={`px-2.5 py-1.5 rounded-lg text-[10px] md:text-xs font-black whitespace-nowrap transition-all ${mainCategory === 'conquest' ? 'main-tab-active shadow-[0_0_15px_rgba(37,99,235,0.3)]' : 'bg-slate-50 dark:bg-slate-800 text-slate-400'}`}>01. 균격</button>
+                                        <button onClick={() => setMainCategory('raid')} className={`px-2.5 py-1.5 rounded-lg text-[10px] md:text-xs font-black whitespace-nowrap transition-all ${mainCategory === 'raid' ? 'main-tab-active shadow-[0_0_15px_rgba(37,99,235,0.3)]' : 'bg-slate-50 dark:bg-slate-800 text-slate-400'}`}>02. 레이드</button>
+                                        <button onClick={() => setMainCategory('ranking')} className={`px-2.5 py-1.5 rounded-lg text-[10px] md:text-xs font-black whitespace-nowrap transition-all ${mainCategory === 'ranking' ? 'main-tab-active bg-yellow-500 border-yellow-600 text-white' : 'bg-slate-50 dark:bg-slate-800 text-slate-400'}`}>03. 랭킹</button>
                                     </div>
-                                    <div className="flex items-center gap-2 mt-3 font-bold">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse font-black font-black"></span>
-                                        <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.2em]">로그인 요원: <span className="text-blue-600 font-black font-black">{nickname}</span></span>
+                                    <div className="flex items-center gap-2 font-black">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shrink-0"></span>
+                                        <span className="text-[9px] md:text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest truncate font-black">길드원: <span className="text-blue-600 font-bold">{nickname}</span></span>
                                     </div>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-3 ml-auto font-black font-black font-black font-black">
-                                {mainCategory === 'conquest' && (
-                                    <div className="bg-slate-900 text-white px-5 py-2 rounded-xl border border-slate-700 text-center min-w-[150px] shadow-lg font-black font-black font-black font-black">
-                                        <div className="text-[7px] text-slate-500 font-black uppercase tracking-widest mb-0.5 font-black font-black font-black">시즌 종료까지</div>
-                                        <div className="text-sm font-black tracking-widest font-mono text-blue-400 italic font-black font-black font-black font-black">{timeLeftStr}</div>
-                                    </div>
-                                )}
-                                <button onClick={() => setShowAdminEntry(!showAdminEntry)} className="w-10 h-10 border rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-50 shadow-sm font-black font-black font-black"><i className="fas fa-cog font-black"></i></button>
-                                {showAdminEntry && (
-                                    <div className="absolute top-24 right-10 p-4 dashboard-card border-blue-500/30 w-48 animate-fadeIn z-50 font-black">
-                                        <div className="flex gap-2 font-black font-black">
-                                            <input type="password" placeholder="코드" className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-blue-500 font-black text-slate-900" onChange={e => setAdminPass(e.target.value)} />
-                                            <button onClick={() => { if(adminPass === "123456") { setIsAdminMode(true); setShowAdminEntry(false); } else { showAlert("비밀번호 오류", "error"); } }} className="px-2 bg-blue-600 text-white rounded-lg text-[10px] font-black font-black font-black font-black">확인</button>
-                                        </div>
-                                    </div>
-                                )}
-                                <button onClick={() => setIsDarkMode(!isDarkMode)} className="w-10 h-10 border rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-50 shadow-sm font-black font-black font-black font-black"><i className={`fas ${isDarkMode ? 'fa-sun' : 'fa-moon'} font-black font-black`}></i></button>
+                            <div className="flex items-center gap-2 font-black">
+                                <button onClick={() => setShowAdminEntry(true)} className="w-9 h-9 border rounded-xl flex items-center justify-center text-slate-400 hover:text-blue-500 transition-colors shadow-sm relative font-black">
+                                    <i className="fas fa-cog font-black"></i>
+                                </button>
+                                <button onClick={() => setIsDarkMode(!isDarkMode)} className="w-9 h-9 border rounded-xl flex items-center justify-center text-slate-400 hover:text-yellow-500 shadow-sm font-black font-black"><i className={`fas ${isDarkMode ? 'fa-sun' : 'fa-moon'} font-black`}></i></button>
                             </div>
                         </div>
+
+                        {showAdminEntry && (
+                            <div className="fixed inset-0 z-[600] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fadeIn">
+                                <div className="bg-white dark:bg-slate-800 dashboard-card p-8 w-full max-w-[320px] border-t-8 border-blue-600 shadow-2xl font-black">
+                                    <div className="mb-6 text-center font-black">
+                                        <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-1 font-black">Security Protocol</p>
+                                        <h3 className="text-lg font-black dark:text-white font-black">관리자 인증</h3>
+                                    </div>
+                                    <div className="flex flex-col gap-4 font-black">
+                                        <input type="password" autoFocus placeholder="Passkey" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-4 text-center text-xl outline-none focus:border-blue-500 text-slate-900 dark:text-white tracking-widest font-black" onChange={e => setAdminPass(e.target.value)} onKeyDown={e => { if(e.key === 'Enter' && adminPass === "123456") { setIsAdminMode(true); setShowAdminEntry(false); setAdminPass(""); } }} />
+                                        <div className="grid grid-cols-2 gap-3 font-black">
+                                            <button onClick={() => { setShowAdminEntry(false); setAdminPass(""); }} className="py-3 bg-slate-100 dark:bg-slate-700 text-slate-600 rounded-xl font-bold text-sm font-black">취소</button>
+                                            <button onClick={() => { if(adminPass === "123456") { setIsAdminMode(true); setShowAdminEntry(false); setAdminPass(""); } else { showAlert("비밀번호 오류", "error"); } }} className="py-3 bg-blue-600 text-white rounded-xl font-bold text-sm shadow-lg font-black font-black">인증</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </header>
 
-                    <main className="p-5 md:p-10 pb-32 font-black font-black font-black">
+                    <main className="p-4 md:p-8 mb-32 font-black">
                         {mainCategory === 'conquest' && (
-                            <div className="desktop-layout font-black font-black font-black font-black">
-                                <section className="space-y-6 font-black font-black font-black font-black">
-                                    <form onSubmit={handleSubmitConquest} className="dashboard-card p-8 md:p-10 space-y-10 lg:sticky lg:top-[140px] text-slate-900 dark:text-white border-l-[10px] border-blue-500 font-black font-black">
-                                        <div className="flex justify-between items-center border-b pb-6 dark:border-slate-700 font-black">
-                                            <h2 className="font-black text-2xl italic uppercase tracking-tighter italic font-['Orbitron'] font-black">작전 보고</h2>
-                                            <span className="text-[9px] font-black text-blue-500 bg-blue-50 dark:bg-blue-900/30 px-3 py-1 rounded-full uppercase tracking-widest font-bold font-black font-black font-black">기록용</span>
+                            <div className="desktop-layout font-black">
+                                <aside className="space-y-6 font-black font-black">
+                                    <div className="dashboard-card p-5 space-y-4 font-black font-black">
+                                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 font-black font-black"><i className="fas fa-broadcast-tower text-red-500 animate-pulse font-black"></i> 실시간 작전 로그</h3>
+                                        <div className="space-y-2.5 max-h-[150px] overflow-y-auto no-scrollbar font-bold font-black font-black">
+                                            {logs.slice(0, 5).map((l, idx) => (
+                                                <div key={idx} className="text-[10px] leading-relaxed border-b border-slate-50 dark:border-slate-800 pb-1.5 animate-fadeIn font-black">
+                                                    <span className="text-blue-500 font-black font-black font-black font-black">[{l.nickname}]</span> {l.island} {l.mob} 성공
+                                                </div>
+                                            ))}
+                                            {logs.length === 0 && <p className="text-[10px] text-slate-400 text-center py-4 font-black">활동 기록 대기 중...</p>}
                                         </div>
-                                        <div className="space-y-5 font-black font-black font-black">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest font-black">구역 할당</label>
-                                            <div className="grid grid-cols-2 gap-4 font-black font-black">
+                                    </div>
+                                    <form onSubmit={handleSubmitConquest} className="dashboard-card p-6 md:p-8 space-y-8 text-slate-900 dark:text-white border-l-[8px] border-blue-500 font-black font-black font-black">
+                                        <h2 className="text-lg uppercase italic border-b pb-4 dark:border-slate-700 font-bold font-black font-black">작전 보고서 제출</h2>
+                                        <div className="space-y-4 font-black">
+                                            <label className="text-[10px] text-slate-400 uppercase tracking-widest block mb-2 font-bold font-black font-black">01. 거점 선택</label>
+                                            <div className="grid grid-cols-2 gap-2.5 font-bold font-black">
                                                 {islands.map(i => (
-                                                    <button key={i.name} type="button" onClick={() => setSelectedIsland(i.name)} 
-                                                        className={`p-5 rounded-2xl border-2 transition-all duration-300 flex flex-col items-center gap-3 ${selectedIsland === i.name ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-600 shadow-md scale-[1.05]' : 'border-white/5 bg-white/5 text-slate-500 hover:border-white/20 font-black font-black font-black'}`}>
-                                                        <i className={`fas ${i.icon} text-xl font-black font-black`}></i>
-                                                        <span className="font-black text-[12px] uppercase font-black">{i.name}</span>
+                                                    <button key={i.name} type="button" onClick={() => setSelectedIsland(i.name)} className={`p-3.5 rounded-xl border-2 transition-all flex flex-col items-center gap-1.5 ${selectedIsland === i.name ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-600 scale-[1.03]' : 'border-slate-100 dark:border-slate-800 text-slate-400 font-black'}`}>
+                                                        <i className={`fas ${i.icon} text-base font-black`}></i>
+                                                        <span className="font-black text-[10px] uppercase font-black">{i.name}</span>
                                                     </button>
                                                 ))}
                                             </div>
                                         </div>
-                                        <div className="bg-slate-900 rounded-[2.5rem] p-10 text-center shadow-inner border border-slate-800 font-black font-black font-black font-black">
-                                            <label className="text-[10px] font-black text-slate-500 uppercase mb-8 block tracking-widest font-black font-black font-black">작전 수행 시간</label>
-                                            <div className="text-6xl font-black text-white italic mb-12 tracking-[0.2em] font-mono flex justify-center items-center font-black font-black">
-                                                {String(playMin).padStart(2, '0')}<span className="text-blue-500 animate-pulse mx-2 font-black font-black">:</span>{String(playSec).padStart(2, '0')}
-                                            </div>
-                                            <div className="grid grid-cols-3 gap-3 font-black font-black">
-                                                {[1, 10, 1].map((v, i) => (
-                                                    <button key={i} type="button" onClick={() => adjustTime(i===0?'min':'sec', v)} className="bg-white/10 hover:bg-white/20 py-4 rounded-xl text-[11px] font-black text-white font-black font-black font-black">+{v}{i===0?'분':'초'}</button>
-                                                ))}
-                                                {[-1, -10, -1].map((v, i) => (
-                                                    <button key={i} type="button" onClick={() => adjustTime(i===0?'min':'sec', v)} className="bg-red-500/10 hover:bg-red-500/20 py-4 rounded-xl text-[11px] font-black text-red-400 font-black font-black font-black font-black font-black">{v}{i===0?'분':'초'}</button>
+                                        <div className="space-y-4 font-black">
+                                            <label className="text-[10px] text-slate-400 uppercase tracking-widest block mb-2 font-bold font-black font-black font-black">02. 대상 등급</label>
+                                            <div className="grid grid-cols-2 gap-2.5 font-bold font-black font-black">
+                                                {mobs.map(m => (
+                                                    <button key={m} type="button" onClick={() => setSelectedMob(m)} className={`py-3.5 rounded-xl border-2 text-[10px] font-black uppercase transition-all ${selectedMob === m ? 'border-blue-600 bg-blue-600 text-white font-black' : 'border-slate-100 dark:border-slate-800 text-slate-400 font-black font-black'}`}>{m}</button>
                                                 ))}
                                             </div>
                                         </div>
-                                        <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-6 rounded-[2rem] font-black text-xl shadow-[0_15px_30px_rgba(37,99,235,0.3)] transition-all uppercase tracking-[0.4em] italic font-black font-black font-black">작전 보고 승인</button>
+                                        <div className="bg-slate-900 rounded-[2rem] p-6 text-center border border-slate-800 font-black font-black font-black">
+                                            <div className="text-4xl md:text-5xl font-black text-white italic mb-8 font-mono font-black font-black">{String(playMin).padStart(2, '0')}<span className="text-blue-500 mx-1.5 font-black">:</span>{String(playSec).padStart(2, '0')}</div>
+                                            <div className="grid grid-cols-3 gap-2 font-black">
+                                                {[1, 10, 1].map((v, i) => (
+                                                    <button key={i} type="button" onClick={() => adjustTime(i===0?'min':'sec', v)} className="bg-white/10 p-2.5 rounded-lg text-[10px] font-black text-white font-black">+{v}{i===0?'분':'초'}</button>
+                                                ))}
+                                                {[-1, -10, -1].map((v, i) => (
+                                                    <button key={i} type="button" onClick={() => adjustTime(i===0?'min':'sec', v)} className="bg-red-500/10 p-2.5 rounded-lg text-[10px] font-black text-red-400 font-black font-black">{v}{i===0?'분':'초'}</button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-8 rounded-2xl font-black text-2xl shadow-lg shadow-blue-500/20 transition-all active:scale-95 uppercase italic border-b-4 border-blue-800 font-black font-black font-black font-black">제출 승인</button>
                                     </form>
-                                </section>
-                                <section className="space-y-8 font-black font-black font-black font-black">
-                                    <div className="flex justify-between items-center mb-6 px-2 font-black font-black font-black">
-                                        <h3 className="font-black text-xl italic uppercase tracking-tighter text-blue-500 font-['Orbitron'] font-black font-black font-black">실시간 요원 그리드</h3>
-                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest font-black font-black">{members.length}명 활동 중</span>
+                                </aside>
+
+                                <section className="space-y-6 mt-8 lg:mt-0 font-black font-black">
+                                    <div className="flex justify-between items-center px-2 font-black font-black font-black">
+                                        <h3 className="font-black text-lg italic uppercase text-blue-500 font-['Orbitron'] font-black font-black">길드원 작전 현황</h3>
+                                        <span className="text-[10px] text-slate-400 uppercase tracking-widest font-black font-black">{members.length} Agents</span>
                                     </div>
-                                    <div className="agent-grid font-black font-black font-black">
+                                    <div className="agent-grid font-black font-black">
                                         {members.map(mDoc => {
                                             const st = stats.playerMap[mDoc.name] || { swords: 0, totalInputTimeSec: 0 };
                                             const remS = TOTAL_RESOURCES - (st.swords || 0);
@@ -651,27 +570,19 @@
                                             const remMin = Math.floor(Math.max(0, remainingSec) / 60);
                                             const remSec = Math.max(0, remainingSec) % 60;
                                             return (
-                                                <div key={mDoc.id} className={`dashboard-card p-8 transition-all border-l-[8px] ${st.swords > 0 ? 'border-l-blue-500 shadow-xl font-black' : 'opacity-30 grayscale border-l-slate-400 font-black font-black font-black'} hover:translate-y-[-6px] overflow-hidden font-black font-black`}>
-                                                    <div className="flex justify-between items-start mb-8 font-black text-slate-900 dark:text-white font-black font-black font-black">
-                                                        <div className="flex flex-col font-black font-black font-black font-black font-black">
-                                                            <span className="text-2xl font-black truncate italic tracking-tighter font-black font-black font-bold font-black font-black font-black">{mDoc.name}</span>
-                                                            <span className="text-[10px] text-blue-500 font-black italic tracking-widest mt-1 font-black font-black font-black font-black font-black">{rankingData.getTitle(mDoc.name)}</span>
+                                                <div key={mDoc.id} className={`dashboard-card p-5 md:p-6 border-l-[6px] ${st.swords > 0 ? 'border-l-blue-500 shadow-md font-black font-black' : 'opacity-30 grayscale border-l-slate-400 font-black font-black font-black'} hover:translate-y-[-4px] transition-all font-black font-black font-black`}>
+                                                    <div className="flex flex-col mb-4 gap-1.5 min-w-0 font-black font-black">
+                                                        <div className="flex justify-between items-start gap-2 font-black font-black">
+                                                            <span className="text-lg font-black truncate text-slate-900 dark:text-white italic font-black font-black font-black">{mDoc.name}</span>
+                                                            <span className={`text-[8px] md:text-[9px] font-black px-2 py-0.5 rounded-full shadow-sm whitespace-nowrap ${remS <= 0 ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-blue-600'} font-black`}>잔여: {remS}</span>
                                                         </div>
-                                                        <span className={`text-[10px] font-black px-4 py-1.5 rounded-full shadow-sm tracking-widest uppercase ${remS <= 0 ? 'bg-red-50 text-red-500 border border-red-100 font-black' : 'bg-blue-50 text-blue-600 border border-blue-100 font-black font-black font-black'}`}>잔여: {remS}</span>
+                                                        <span className="text-[9px] text-blue-500 font-black italic tracking-widest truncate font-black font-black font-black">{rankingData.getPersonalStatus(mDoc.name).currentTitle.name}</span>
                                                     </div>
-                                                    <div className="space-y-5 font-black font-black font-black">
-                                                        <div className="relative h-3 w-full bg-slate-100 dark:bg-black/30 rounded-full overflow-hidden border border-slate-200 font-black font-black">
-                                                            <div className="h-full bg-gradient-to-r from-blue-600 to-cyan-400 transition-all duration-1000 shadow-[0_0_10px_rgba(59,130,246,0.5)] font-black" style={{ width: `${(st.swords / TOTAL_RESOURCES) * 100}%` }}></div>
-                                                        </div>
-                                                        <div className="flex flex-col gap-3 font-black font-black font-black">
-                                                            <div className="flex justify-between items-center text-[11px] font-black uppercase text-slate-500 font-black font-black">
-                                                                <span>참여 횟수</span>
-                                                                <span className="text-slate-900 dark:text-white italic text-lg font-black">{st.swords} <span className="text-slate-300 text-xs italic font-black">/ {TOTAL_RESOURCES}</span></span>
-                                                            </div>
-                                                            <div className="flex justify-between items-center text-emerald-500 border-t border-slate-100 dark:border-slate-800 pt-3 font-black font-black">
-                                                                <span className="text-[11px] font-black uppercase font-black">전체 남은 시간</span>
-                                                                <span className="italic text-lg font-black font-black">{remMin}분 {remSec}초</span>
-                                                            </div>
+                                                    <div className="space-y-4 font-black">
+                                                        <div className="relative h-2 w-full bg-slate-100 dark:bg-black/30 rounded-full overflow-hidden font-black font-black font-black font-black"><div className="h-full bg-gradient-to-r from-blue-600 to-cyan-400 transition-all duration-1000 font-black" style={{ width: `${(st.swords / TOTAL_RESOURCES) * 100}%` }}></div></div>
+                                                        <div className="flex flex-col gap-1 text-[10px] md:text-[11px] font-black text-slate-500 font-black font-black font-black">
+                                                            <div className="flex justify-between font-black font-black"><span>칼 사용</span><span className="text-slate-900 dark:text-white italic font-black font-black">{(st.swords || 0)} / {TOTAL_RESOURCES}</span></div>
+                                                            <div className="flex justify-between text-emerald-500 border-t pt-2 border-slate-50 dark:border-slate-800 font-black"><span>남은 시간</span><span className="italic font-mono font-black font-black font-black">{remMin}m {remSec}s</span></div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -683,65 +594,42 @@
                         )}
 
                         {mainCategory === 'raid' && (
-                            <div className="desktop-layout text-slate-900 dark:text-white font-bold font-black font-black font-black font-black">
-                                <section className="space-y-6 font-black font-black font-black font-black font-black">
-                                    <div className="dashboard-card p-8 md:p-12 space-y-12 border-t-[10px] border-emerald-500 shadow-2xl font-black font-black">
-                                        <div className="flex justify-between items-center border-b pb-8 dark:border-slate-700 font-black font-black">
-                                            <h2 className="font-black text-3xl italic uppercase tracking-tighter font-black font-['Orbitron'] font-black font-black">레이드 관제</h2>
-                                            <span className="text-[10px] font-black text-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 px-4 py-1.5 rounded-full uppercase tracking-widest font-black font-bold font-black font-black">활동 중</span>
+                            <div className="desktop-layout text-slate-900 dark:text-white font-black font-black">
+                                <section className="mb-10 font-black font-black font-black font-black">
+                                    <div className="dashboard-card p-6 md:p-10 space-y-10 border-t-[10px] border-emerald-500 shadow-2xl font-black font-black font-black">
+                                        <div className="flex justify-between items-center border-b pb-4 dark:border-slate-700 font-black font-black font-black">
+                                            <h2 className="font-black text-xl italic uppercase tracking-tighter font-black font-black font-black">레이드 전술 관제</h2>
+                                            <span className="text-[9px] text-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 px-2.5 py-1 rounded-full uppercase font-bold font-black font-black">STATION</span>
                                         </div>
-                                        <div className="p-10 bg-slate-50 dark:bg-slate-800/50 rounded-[3rem] text-center space-y-12 shadow-inner border border-white/5 font-black font-black font-black font-black">
-                                            <div className="space-y-4 font-black font-black font-black font-black">
-                                                <div className="text-[12px] font-black text-slate-400 uppercase tracking-[0.4em] font-black font-black font-black">에너지 소비 기록</div>
-                                                <p className="text-[10px] text-red-500 font-black uppercase tracking-widest italic animate-pulse font-black font-black">하루 최대 2개 / 총 보관 6개</p>
+                                        <div className="p-6 md:p-10 bg-slate-50 dark:bg-slate-800/50 rounded-[2.5rem] text-center space-y-10 shadow-inner font-black font-black font-black">
+                                            <div className="space-y-2 font-black font-black font-black">
+                                                <div className="text-[11px] font-black text-slate-400 uppercase tracking-[0.3em] font-bold font-black font-black">에너지 데이터 기록</div>
+                                                <p className="text-[9px] text-red-500 font-black uppercase tracking-widest italic animate-pulse font-black font-black">하루 2개 지급 / 6개 보관</p>
                                             </div>
-                                            
-                                            <button 
-                                                onClick={() => handleSubmitRaid(1)} 
-                                                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white border-b-[12px] border-emerald-800 py-14 rounded-[3.5rem] font-black text-4xl shadow-[0_25px_60px_rgba(16,185,129,0.4)] transition-all active:scale-95 active:border-b-0 active:translate-y-3 flex flex-col items-center justify-center gap-5 italic font-black font-black font-black"
-                                            >
-                                                <i className="fas fa-bolt text-yellow-300 text-5xl font-black font-black font-black"></i>
-                                                1개 소모 승인
-                                            </button>
-                                            
-                                            <div className="flex gap-5 font-black font-black font-black">
-                                                <button onClick={handleReduceRaid} className="flex-1 bg-white dark:bg-slate-700 text-red-500 border-2 border-red-100 dark:border-red-900/30 py-6 rounded-3xl font-black text-xs uppercase tracking-[0.2em] hover:bg-red shadow-xl flex items-center justify-center gap-3 font-black">
-                                                    <i className="fas fa-undo font-black font-black font-black"></i> 취소
-                                                </button>
-                                                <button onClick={handleResetRaid} className="flex-1 bg-slate-800 text-slate-300 border border-slate-700 py-6 rounded-3xl font-black text-xs uppercase tracking-[0.2em] hover:bg-slate-950 shadow-xl flex items-center justify-center gap-3 font-black font-black font-black">
-                                                    <i className="fas fa-trash-alt font-black font-black font-black font-black"></i> 초기화
-                                                </button>
+                                            <button onClick={() => handleSubmitRaid(1)} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white border-b-[10px] border-emerald-800 py-10 rounded-[3rem] font-black text-3xl shadow-xl active:scale-95 active:border-b-0 active:translate-y-2 flex flex-col items-center justify-center gap-4 italic font-black font-black font-black"><i className="fas fa-bolt text-yellow-300 text-4xl font-black"></i>열쇠 승인</button>
+                                            <div className="grid grid-cols-2 gap-3 font-black font-black font-black">
+                                                <button onClick={handleReduceRaid} className="bg-white dark:bg-slate-700 text-red-500 border-2 border-red-100 dark:border-red-900/30 py-4.5 rounded-2xl font-black text-xs uppercase tracking-widest font-black font-black font-black">취소</button>
+                                                <button onClick={handleResetRaid} className="bg-slate-800 text-slate-300 border border-slate-700 py-4.5 rounded-2xl font-black text-xs uppercase tracking-widest font-black font-black font-black">리셋</button>
                                             </div>
                                         </div>
                                     </div>
                                 </section>
-                                <section className="space-y-10 animate-fadeIn font-bold font-black font-black font-black font-black font-black">
-                                    <div className="flex justify-between items-center mb-8 px-2 font-black font-black font-black font-black">
-                                        <h3 className="font-black text-2xl italic uppercase tracking-tighter text-emerald-500 font-['Orbitron'] font-black font-black font-black font-black">요원별 레이드 현황</h3>
-                                        <div className="flex items-center gap-3 px-6 py-2.5 bg-emerald-500/10 rounded-full border border-emerald-500/20 shadow-2xl font-black font-black font-black font-black font-black font-black"><span className="status-dot status-active animate-ping font-black font-black font-black font-black"></span><span className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.2em] font-black font-black">실시간 동기화</span></div>
-                                    </div>
-                                    <div className="agent-grid font-bold font-black font-black font-black font-black">
+                                <section className="space-y-8 animate-fadeIn font-black font-black font-black">
+                                    <div className="agent-grid font-black">
                                         {members.map(mDoc => {
                                             const st = stats.playerMap[mDoc.name] || { raidToday: 0, raidMonth: 0 };
-                                            const usedToday = st.raidToday || 0;
-                                            const usedMonth = st.raidMonth || 0;
                                             return (
-                                                <div key={mDoc.id} className={`dashboard-card p-10 rounded-[3rem] border-l-[10px] ${usedToday > 0 ? 'border-l-emerald-500 shadow-2xl font-black' : 'opacity-30 grayscale border-l-slate-400 font-black font-black font-black font-black font-black'} hover:scale-[1.05] overflow-hidden font-black font-black`}>
-                                                    <div className="flex justify-between items-start mb-10 font-bold font-black font-black font-black">
-                                                        <div className="flex flex-col font-black font-black font-black font-black font-black font-black">
-                                                            <span className="text-3xl font-black dark:text-white truncate italic tracking-tighter font-black font-black font-black font-black font-black font-black font-black">{mDoc.name}</span>
-                                                            <span className="text-[11px] text-emerald-500 font-black italic tracking-widest mt-1 font-black font-black font-black font-black font-black font-black">{rankingData.getTitle(mDoc.name)}</span>
+                                                <div key={mDoc.id} className={`dashboard-card p-6 md:p-7 rounded-[2rem] border-l-[10px] ${st.raidToday > 0 ? 'border-l-emerald-500 shadow-xl font-black font-black' : 'opacity-30 grayscale border-l-slate-400 font-black font-black font-black'} transition-all font-black font-black`}>
+                                                    <div className="flex justify-between items-start mb-10 gap-3 font-black font-black">
+                                                        <div className="flex flex-col min-w-0 font-black font-black font-black">
+                                                            <span className="text-xl md:text-2xl font-black truncate text-slate-900 dark:text-white italic leading-tight font-black font-black font-black">{mDoc.name}</span>
+                                                            <span className="text-[10px] text-emerald-500 font-black italic tracking-widest mt-1 truncate font-black font-black font-black font-black font-black">{rankingData.getPersonalStatus(mDoc.name).currentTitle.name}</span>
                                                         </div>
-                                                        <div className={`w-5 h-5 rounded-full ${usedToday >= 2 ? 'bg-emerald-500 shadow-[0_0_20px_rgba(16,185,129,1)] font-black' : 'bg-slate-300 font-black'}`}></div>
+                                                        <div className={`shrink-0 w-4 h-4 rounded-full ${st.raidToday >= 2 ? 'bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,1)]' : 'bg-slate-300'} font-black`}></div>
                                                     </div>
-                                                    
-                                                    <div className="grid grid-cols-2 gap-5 mb-10 font-bold font-black font-black font-black">
-                                                        <div className="bg-slate-50 dark:bg-slate-800/60 p-6 rounded-[1.5rem] border border-slate-100 dark:border-slate-700 text-center font-black font-black font-black"><div className="text-[10px] text-slate-400 font-black uppercase mb-2 font-black font-black font-black">오늘 소모</div><div className="text-3xl font-black dark:text-white italic font-mono font-black font-black font-black">{usedToday}</div></div>
-                                                        <div className="bg-emerald-50 dark:bg-emerald-900/20 p-6 rounded-[1.5rem] border border-emerald-100 dark:border-emerald-800 text-center font-black font-black font-black font-black"><div className="text-[10px] text-emerald-600 font-black uppercase mb-2 font-black font-black font-black font-black">누적 합계</div><div className="text-3xl font-black text-emerald-600 dark:text-emerald-400 italic font-mono font-black font-black font-black font-black">{usedMonth}</div></div>
-                                                    </div>
-
-                                                    <div className="w-full bg-slate-100 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden border border-slate-200 shadow-inner font-bold font-black font-black font-black">
-                                                        <div className="h-full bg-gradient-to-r from-emerald-600 via-lime-500 to-cyan-400 transition-all duration-1000 shadow-[0_0_20px_rgba(16,185,129,0.7)] font-black font-black" style={{width: `${Math.min(100, (usedMonth/60)*100)}%` }}></div>
+                                                    <div className="grid grid-cols-2 gap-3 mb-6 text-center font-black font-black font-black font-black font-black">
+                                                        <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-[1.5rem] border border-slate-100 font-black font-black font-black"><div className="text-[9px] text-slate-400 uppercase mb-1 font-bold">오늘</div><div className="text-xl font-black dark:text-white italic font-black font-black font-black">{st.raidToday}</div></div>
+                                                        <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-[1.5rem] border border-emerald-100 font-black font-black font-black font-black font-black"><div className="text-[9px] text-emerald-600 uppercase mb-1 font-bold">누적</div><div className="text-xl font-black text-emerald-600 italic font-black font-black font-black font-black font-black">{rankingData.getPersonalStatus(mDoc.name).raidCount}</div></div>
                                                     </div>
                                                 </div>
                                             );
@@ -752,69 +640,29 @@
                         )}
 
                         {mainCategory === 'ranking' && (
-                            <div className="animate-fadeIn space-y-10 font-black font-black font-black font-black font-black">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-10 font-black font-black font-black font-black">
-                                    <section className="space-y-8 font-black font-black font-black font-black">
-                                        <div className="flex justify-between items-center px-4 font-black font-black">
-                                            <h3 className="font-black text-2xl italic uppercase tracking-tighter text-blue-600 font-['Orbitron'] font-black font-black font-black">주간 랭킹</h3>
-                                            <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest font-black font-black font-black">단기 기여도</span>
-                                        </div>
-                                        <div className="dashboard-card overflow-hidden font-black font-black font-black">
-                                            <table className="w-full text-left font-black font-black">
-                                                <thead className="bg-slate-50 dark:bg-slate-800 text-slate-400 font-black text-[11px] uppercase border-b font-black font-black font-black">
-                                                    <tr>
-                                                        <th className="px-8 py-5 font-black font-black">순위</th>
-                                                        <th className="px-8 py-5 font-black font-black">요원 / 칭호</th>
-                                                        <th className="px-8 py-5 text-right font-black font-black font-black">점수</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y font-black font-black font-black">
+                            <div className="animate-fadeIn space-y-10 font-black font-black font-black font-black">
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 font-black font-black font-black">
+                                    <section className="space-y-6 font-black font-black font-black font-black font-black">
+                                        <h3 className="font-black text-2xl italic uppercase text-blue-600 px-2 font-['Orbitron'] font-black font-black font-black font-black">주간 랭킹 리스트</h3>
+                                        <div className="dashboard-card overflow-hidden font-black">
+                                            <table className="w-full text-left font-black font-black font-black font-black font-black font-black font-black">
+                                                <thead className="bg-slate-50 dark:bg-slate-800 text-slate-400 text-[10px] uppercase border-b font-black font-black"><tr><th className="px-5 py-4 font-black font-black font-black font-black">순위</th><th className="px-5 py-4 font-black font-black font-black font-black">길드원</th><th className="px-5 py-4 text-right font-black font-black font-black font-black">점수</th></tr></thead>
+                                                <tbody className="divide-y font-black font-black font-black font-black font-black font-black">
                                                     {rankingData.weekly.slice(0, 10).map((r, i) => (
-                                                        <tr key={r.name} className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors ${r.name === nickname ? 'bg-blue-50/50 dark:bg-blue-900/20 font-black font-black font-black' : 'font-black font-black font-black'}`}>
-                                                            <td className="px-8 py-6 font-black italic text-2xl font-black font-black">
-                                                                {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`}
-                                                            </td>
-                                                            <td className="px-8 py-6 font-black font-black font-black">
-                                                                <div className="flex flex-col font-black font-black font-black font-black">
-                                                                    <span className="font-black font-black text-lg font-black font-black">{r.name}</span>
-                                                                    <span className="text-[10px] text-blue-500 italic font-black font-black font-black font-black font-black">{rankingData.getTitle(r.name)}</span>
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-8 py-6 text-right font-black text-blue-600 italic font-black text-xl font-black font-black font-black">{r.score} P</td>
-                                                        </tr>
+                                                        <tr key={r.name} className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 ${r.name === nickname ? 'bg-blue-50/50 dark:bg-blue-900/20 font-black font-black font-black' : ''}`}><td className="px-5 py-5 italic text-xl font-black font-black font-black font-black">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`}</td><td className="px-5 py-5 font-black"><div className="flex flex-col font-black font-black font-black font-black font-black"><span className="font-black font-black font-black font-black font-black">{r.name}</span><span className="text-[9px] text-blue-500 italic truncate font-black font-black font-black font-black font-black">{rankingData.getPersonalStatus(r.name).currentTitle.name}</span></div></td><td className="px-5 py-5 text-right font-black text-blue-600 italic whitespace-nowrap font-black font-black font-black font-black font-black font-black">{r.score} P</td></tr>
                                                     ))}
                                                 </tbody>
                                             </table>
                                         </div>
                                     </section>
-                                    <section className="space-y-8 font-black font-black font-black font-black">
-                                        <div className="flex justify-between items-center px-4 font-black font-black">
-                                            <h3 className="font-black text-2xl italic uppercase tracking-tighter text-emerald-600 font-['Orbitron'] font-black font-black font-black font-black font-black">명예의 전당</h3>
-                                            <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest font-black font-black font-black">월간 에이스</span>
-                                        </div>
-                                        <div className="dashboard-card overflow-hidden font-black font-black font-black">
-                                            <table className="w-full text-left font-black font-black font-black">
-                                                <thead className="bg-slate-50 dark:bg-slate-800 text-slate-400 font-black text-[11px] uppercase border-b font-black font-black font-black">
-                                                    <tr>
-                                                        <th className="px-8 py-5 font-black font-black font-black">순위</th>
-                                                        <th className="px-8 py-5 font-black font-black font-black">요원 / 칭호</th>
-                                                        <th className="px-8 py-5 text-right font-black font-black font-black">점수</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y font-black font-black font-black font-black">
+                                    <section className="space-y-6 font-black font-black font-black font-black font-black">
+                                        <h3 className="font-black text-2xl italic uppercase text-emerald-600 px-2 font-['Orbitron'] font-black font-black font-black font-black font-black font-black">시즌 명예의 전당</h3>
+                                        <div className="dashboard-card overflow-hidden font-black font-black font-black font-black font-black font-black">
+                                            <table className="w-full text-left font-black font-black font-black font-black font-black font-black font-black font-black">
+                                                <thead className="bg-slate-50 dark:bg-slate-800 text-slate-400 text-[10px] uppercase border-b font-black font-black font-black font-black font-black"><tr><th className="px-5 py-4 font-black font-black font-black font-black font-black">순위</th><th className="px-5 py-4 font-black font-black font-black font-black font-black">길드원</th><th className="px-5 py-4 text-right font-black font-black font-black font-black font-black">점수</th></tr></thead>
+                                                <tbody className="divide-y font-black font-black font-black font-black font-black font-black font-black font-black">
                                                     {rankingData.season.slice(0, 10).map((r, i) => (
-                                                        <tr key={r.name} className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors ${r.name === nickname ? 'bg-emerald-50/50 dark:bg-emerald-900/20 font-black font-black font-black font-black' : 'font-black font-black font-black font-black'}`}>
-                                                            <td className="px-8 py-6 font-black italic text-2xl font-black font-black font-black">
-                                                                {i === 0 ? '👑' : i === 1 ? '💎' : i === 2 ? '⭐' : `#${i+1}`}
-                                                            </td>
-                                                            <td className="px-8 py-6 font-black font-black font-black font-black">
-                                                                <div className="flex flex-col font-black font-black font-black font-black font-black font-black font-black">
-                                                                    <span className="font-black font-black text-lg font-black font-black font-black">{r.name}</span>
-                                                                    <span className="text-[10px] text-emerald-500 italic font-black font-black font-black font-black font-black font-black">{rankingData.getTitle(r.name)}</span>
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-8 py-6 text-right font-black text-emerald-600 italic font-black text-xl font-black font-black font-black font-black">{r.score} P</td>
-                                                        </tr>
+                                                        <tr key={r.name} className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 ${r.name === nickname ? 'bg-emerald-50/50 dark:bg-emerald-900/20 font-black' : ''}`}><td className="px-5 py-5 italic text-xl font-black font-black font-black font-black font-black font-black">{i === 0 ? '👑' : i === 1 ? '💎' : i === 2 ? '⭐' : `#${i+1}`}</td><td className="px-5 py-5 font-black"><div className="flex flex-col font-black font-black font-black font-black font-black font-black font-black font-black"><span>{r.name}</span><span className="text-[9px] text-emerald-500 italic truncate font-black font-black font-black font-black font-black font-black font-black font-black font-black">{rankingData.getPersonalStatus(r.name).currentTitle.name}</span></div></td><td className="px-5 py-5 text-right font-black text-emerald-600 italic whitespace-nowrap font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black">{r.score} P</td></tr>
                                                     ))}
                                                 </tbody>
                                             </table>
@@ -825,41 +673,60 @@
                         )}
                     </main>
 
-                    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[92%] md:w-full md:max-w-5xl z-50 animate-fadeInUp font-bold font-black font-black font-black">
-                        <div className="bg-slate-950/90 backdrop-blur-2xl text-white px-8 py-5 md:px-14 md:py-7 rounded-[3.5rem] flex justify-between items-center shadow-[0_40px_100px_rgba(0,0,0,0.6)] border border-white/10 ring-1 ring-white/10 font-black font-black font-black">
-                            <div className="flex flex-col font-black font-black font-black font-black">
-                                <span className="text-[10px] text-blue-400 font-black uppercase tracking-[0.4em] mb-2 font-black font-black font-black font-black">인증 프로필</span>
-                                <div className="flex flex-col font-black font-black font-black font-black">
-                                    <span className="text-base md:text-3xl font-black italic tracking-tighter truncate max-w-[100px] md:max-w-none font-black font-black font-black font-black">{nickname}</span>
-                                    <span className="text-[10px] text-blue-300 italic font-black font-black font-black font-black font-black">{rankingData.getTitle(nickname)}</span>
+                    {/* 하단 HUD: 상시 고정 및 내용 강화 */}
+                    <div className="fixed bottom-3 md:bottom-6 left-1/2 -translate-x-1/2 w-[95%] md:w-full md:max-w-6xl z-[150] animate-fadeIn font-bold font-black">
+                        <div className="bg-slate-950/95 backdrop-blur-3xl text-white px-4 md:px-12 py-3.5 md:py-5 rounded-[2rem] md:rounded-[3.5rem] flex flex-col md:flex-row justify-between items-center shadow-2xl border border-white/10 ring-1 ring-white/10 gap-3 md:gap-0 font-black font-black font-black">
+                            
+                            <div className="flex items-center gap-4 w-full md:w-auto min-w-0 border-b md:border-b-0 border-white/10 pb-2 md:pb-0 font-black font-black font-black">
+                                <div className="flex flex-col min-w-0 font-bold font-black font-black font-black font-black font-black font-black font-black">
+                                    <span className="text-[8px] md:text-[9px] text-blue-400 font-black uppercase tracking-[0.2em] mb-0.5 font-bold font-black font-black font-black font-black font-black">식별된 길드원</span>
+                                    <div className="flex items-baseline gap-2 font-bold font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black">
+                                        <span className="text-sm md:text-xl font-black italic tracking-tighter truncate font-bold font-black font-black font-black font-black font-black font-black font-black font-black">{nickname}</span>
+                                        <span className="text-[8px] md:text-[10px] text-blue-300 italic truncate font-bold font-black font-black font-black font-black font-black font-black font-black font-black font-black">{myStatus.currentTitle.name}</span>
+                                    </div>
+                                    {myStatus.nextTitle && (
+                                        <span className="text-[7px] md:text-[9px] text-slate-400 font-bold font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black">
+                                            다음 단계까지 <span className="text-yellow-400 font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black">{myStatus.nextTitle.score - myStatus.score}p</span>
+                                        </span>
+                                    )}
                                 </div>
                             </div>
-                            <div className="h-16 w-px bg-white/10 mx-8 font-black font-black"></div>
-                            {mainCategory === 'conquest' ? (
-                                <>
-                                    <div className="flex flex-col text-center font-black font-black font-black font-black">
-                                        <span className="text-[10px] text-slate-500 font-black uppercase tracking-[0.4em] mb-2 font-black font-black font-black">전투 데이터</span>
-                                        <span className="text-sm md:text-3xl font-black italic font-black font-black font-black font-black font-black">{(stats.playerMap[nickname]?.swords || 0)} <span className="text-slate-600 text-base italic font-black font-black font-black font-black font-black font-black font-black">/ {TOTAL_RESOURCES}</span></span>
-                                    </div>
-                                    <div className="h-16 w-px bg-white/10 mx-8 hidden lg:block font-black font-black font-black"></div>
-                                    <div className="flex flex-col text-center font-bold font-black hidden lg:flex font-black font-black font-black font-black">
-                                        <span className="text-[10px] text-emerald-400 font-black uppercase tracking-[0.4em] mb-2 font-black font-black font-black font-black">효율성 지표</span>
-                                        <span className="text-sm md:text-3xl font-black italic font-black font-black font-black font-black">가동 중</span>
-                                    </div>
-                                </>
-                            ) : (
-                                <div className="flex-1 text-center font-black italic text-emerald-400 tracking-[0.5em] text-[10px] md:text-sm animate-pulse font-black font-black font-black font-black font-black font-black">
-                                    명예의 전당 데이터 동기화 중...
+
+                            <div className="hidden lg:flex flex-col items-center justify-center flex-1 px-8 border-x border-white/10 mx-6 font-bold overflow-hidden h-full font-black font-black font-black font-black font-black font-black font-black font-black font-black">
+                                <span className="text-[8px] text-slate-500 uppercase tracking-widest mb-1 font-bold font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black">실시간 작전 피드</span>
+                                <div className="text-[10px] text-slate-200 italic font-bold truncate max-w-full text-center log-animate font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black" key={latestLog ? latestLog.timestamp?.seconds : 'init'}>
+                                    {latestLog ? (
+                                        <>🚩 <span className="text-blue-400">[{latestLog.nickname}]</span> {latestLog.island} {latestLog.mob} 공략 성공</>
+                                    ) : (
+                                        "새로운 작전 데이터를 기다리는 중..."
+                                    )}
                                 </div>
-                            )}
-                            <button onClick={handleResetSession} className="bg-white/10 hover:bg-red-600 text-white p-4 md:px-10 md:py-5 rounded-[2rem] text-[11px] font-black uppercase transition-all shadow-2xl border border-white/5 ml-auto md:ml-12 active:scale-90 italic font-black font-black font-black font-black font-black">
-                                <i className="fas fa-power-off md:mr-3 font-black font-black"></i><span className="hidden md:inline">연결 종료</span>
-                            </button>
+                            </div>
+
+                            <div className="flex items-center justify-around md:justify-end gap-4 md:gap-10 w-full md:w-auto shrink-0 font-bold font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black">
+                                <div className="flex flex-col text-center font-bold font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black">
+                                    <span className="text-[8px] md:text-[9px] text-emerald-400 font-black uppercase tracking-[0.1em] mb-0.5 font-bold font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black">나의 레이드 성과</span>
+                                    <div className="flex items-center justify-center gap-1.5 font-bold font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black">
+                                        <span className="text-xs md:text-lg font-black text-white italic font-bold font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black">{myStatus.raidRank}위</span>
+                                        <span className="text-[8px] md:text-[10px] text-slate-500 font-bold font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black">({myStatus.raidCount}개)</span>
+                                    </div>
+                                </div>
+                                <div className="h-8 w-px bg-white/10 font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black"></div>
+                                <div className="flex flex-col text-center font-bold font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black">
+                                    <span className="text-[8px] md:text-[9px] text-slate-500 font-black uppercase mb-0.5 font-bold font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black">시스템 상태</span>
+                                    <div className="flex items-center gap-1.5 font-bold justify-center font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0 font-bold font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black"></span>
+                                        <span className="text-[9px] md:text-xs font-black uppercase tracking-tighter text-emerald-400 font-bold font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black">정상</span>
+                                    </div>
+                                </div>
+                                <button onClick={handleResetSession} className="bg-white/10 hover:bg-red-600 text-white p-2.5 md:p-3.5 rounded-xl md:rounded-2xl text-[9px] md:text-[11px] font-black uppercase transition-all border border-white/5 active:scale-90 font-bold font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black"><i className="fas fa-power-off font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black font-black"></i></button>
+                            </div>
                         </div>
                     </div>
 
-                    {uiAlert && <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn text-slate-900 font-bold font-black font-black"><div className="bg-white dark:bg-slate-900 rounded-[3rem] shadow-[0_0_100px_rgba(0,0,0,0.8)] p-12 max-w-sm w-full text-center border-t-[10px] border-blue-500 font-black"><div className={`w-20 h-20 rounded-[1.5rem] flex items-center justify-center mx-auto mb-10 ${uiAlert.type === 'error' ? 'bg-red-50 text-red-500 font-black' : 'bg-green-50 text-green-500'}`}><i className={`fas ${uiAlert.type === 'error' ? 'fa-times-circle' : 'fa-check-circle'} text-5xl font-black`}></i></div><h3 className="text-2xl font-black mb-4 dark:text-white uppercase tracking-tighter font-black font-black font-black">시스템 신호</h3><p className="text-slate-600 dark:text-slate-400 mb-12 font-bold leading-relaxed font-black font-black">{uiAlert.message}</p><button onClick={closeAlert} className="w-full bg-slate-900 text-white py-5 rounded-[2rem] font-black uppercase shadow-2xl active:scale-95 transition-all tracking-[0.3em] text-sm md:text-base font-black font-black">확인</button></div></div>}
-                    {uiConfirm && <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn text-slate-900 font-bold font-black font-black"><div className="bg-white dark:bg-slate-900 rounded-[3rem] shadow-[0_0_100px_rgba(0,0,0,0.8)] p-12 max-w-sm w-full text-center border-t-[10px] border-amber-500 font-black"><div className="w-20 h-20 rounded-[1.5rem] bg-red-50 text-red-500 flex items-center justify-center mx-auto mb-10"><i className="fas fa-exclamation-triangle text-5xl text-center"></i></div><h3 className="text-2xl font-black mb-4 dark:text-white uppercase tracking-tighter font-black">실행 확인</h3><p className="text-slate-600 dark:text-slate-400 mb-12 font-bold leading-relaxed font-black">{uiConfirm.message}</p><div className="flex gap-5 text-center font-bold"><button onClick={() => setUiConfirm(null)} className="flex-1 bg-slate-100 dark:bg-white/5 text-slate-500 py-5 rounded-[2rem] font-black uppercase text-xs md:text-sm">취소</button><button onClick={() => { uiConfirm.onConfirm(); setUiConfirm(null); }} className="flex-1 bg-red-600 text-white py-5 rounded-[2rem] font-black uppercase shadow-2xl active:scale-95 text-sm font-bold">진행</button></div></div></div>}
+                    {/* 알림 모달 */}
+                    {uiAlert && <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn text-slate-900 font-bold font-black"><div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl p-10 max-w-sm w-full text-center border-t-[8px] border-blue-500 font-bold font-black font-black font-black font-black font-black"><div className={`w-16 h-16 rounded-[1.5rem] flex items-center justify-center mx-auto mb-8 ${uiAlert.type === 'error' ? 'bg-red-50 text-red-500 font-black font-black font-black font-black font-black font-black' : 'bg-green-50 text-green-500 font-black font-black font-black font-black font-black font-black'}`}><i className={`fas ${uiAlert.type === 'error' ? 'fa-times-circle' : 'fa-check-circle'} text-4xl font-black font-black font-black font-black font-black font-black font-black`}></i></div><h3 className="text-xl font-black mb-3 dark:text-white uppercase tracking-tighter font-black font-black font-black font-black font-black font-black">시스템 메시지</h3><p className="text-slate-600 dark:text-slate-400 mb-10 font-bold leading-relaxed font-black font-black font-black">{uiAlert.message}</p><button onClick={closeAlert} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black uppercase shadow-lg transition-all tracking-widest text-sm font-bold font-black font-black">확인</button></div></div>}
+                    {uiConfirm && <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn text-slate-900 font-bold font-black"><div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl p-10 max-w-sm w-full text-center border-t-[8px] border-amber-500 font-bold font-black font-black font-black font-black font-black"><div className="w-16 h-16 rounded-[1.5rem] bg-red-50 text-red-500 flex items-center justify-center mx-auto mb-8 font-bold font-black font-black font-black font-black font-black"><i className="fas fa-exclamation-triangle text-4xl text-center font-black font-black font-black font-black"></i></div><h3 className="text-xl font-black mb-3 dark:text-white uppercase tracking-tighter font-black font-black font-black font-black font-black font-black">실행 확인</h3><p className="text-slate-600 dark:text-slate-400 mb-10 font-bold leading-relaxed font-black font-black font-black font-black">{uiConfirm.message}</p><div className="flex gap-4 text-center font-bold font-black font-black font-black"><button onClick={() => setUiConfirm(null)} className="flex-1 bg-slate-100 dark:bg-white/5 text-slate-500 py-4 rounded-xl font-black uppercase text-xs font-bold font-black font-black">취소</button><button onClick={() => { uiConfirm.onConfirm(); setUiConfirm(null); }} className="flex-1 bg-red-600 text-white py-4 rounded-xl font-black uppercase shadow-lg active:scale-95 text-xs font-black font-bold font-black">진행</button></div></div></div>}
                 </div>
             );
         }
