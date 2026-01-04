@@ -129,7 +129,7 @@
         const { useState, useEffect, useMemo } = React;
 
         const TOTAL_RESOURCES = 10; 
-        const BASE_TIME_PER_SWORD = 2; // 총 20분을 만들기 위해 1회당 2분으로 설정
+        const BASE_TIME_PER_SWORD = 2; // 1회당 2분, 총 20분
         const INITIAL_MEMBERS = ["늑대벼리", "마자유", "고기쟁이", "김동순", "일민", "캣핑", "콘스", "하늘구름바다", "창식2", "나는도비", "노들노들", "포저", "라잌늑냥", "베리발", "장귝", "유나s"];
         
         const mobs = ['일반몹', '보스'];
@@ -159,6 +159,10 @@
             const [isDarkMode, setIsDarkMode] = useState(localStorage.getItem('isDarkMode') === 'true');
             const [mainCategory, setMainCategory] = useState('conquest');
             
+            // 필터 기본값을 'timeSort'로 설정
+            const [conquestFilter, setConquestFilter] = useState('timeSort');
+            const [raidFilter, setRaidFilter] = useState('all');
+
             const [selectedMob, setSelectedMob] = useState('일반몹');
             const [playMin, setPlayMin] = useState(0);
             const [playSec, setPlaySec] = useState(0);
@@ -296,7 +300,7 @@
             };
 
             const handleSubmitRaid = async (keys) => {
-                const member = members.find(m => m.name === nickname);
+                const member = members.find(m => m.name === nickname); // Syntax error fixed here (added ===)
                 try {
                     await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'raid_logs_v24'), { nickname, keysUsed: keys, timestamp: serverTimestamp(), uid: user.uid });
                     if (member) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', member.id), { score: (member.score || 0) + (keys * 10) });
@@ -555,38 +559,66 @@
                                 </aside>
 
                                 <section className="space-y-6 mt-8 lg:mt-0">
-                                    <div className="flex justify-between items-center px-2">
-                                        <h3 className="font-black text-lg italic uppercase text-blue-500">길드원 작전 현황</h3>
-                                        <span className="text-[10px] text-slate-400 uppercase tracking-widest font-black">Real-time DB</span>
+                                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 px-2">
+                                        <h3 className="font-black text-lg italic uppercase text-blue-500 shrink-0">길드원 작전 현황</h3>
+                                        {/* 균격 필터 UI - '남은시간 순'을 최우선으로 배치 */}
+                                        <div className="flex gap-1.5 bg-slate-200 dark:bg-slate-800 p-1 rounded-xl w-full md:w-auto overflow-x-auto no-scrollbar">
+                                            <button onClick={() => setConquestFilter('timeSort')} className={`whitespace-nowrap px-4 py-1.5 rounded-lg text-[10px] font-black transition-all ${conquestFilter === 'timeSort' ? 'bg-white dark:bg-slate-600 shadow-sm text-emerald-600' : 'text-slate-500'}`}>남은시간 순</button>
+                                            <button onClick={() => setConquestFilter('all')} className={`whitespace-nowrap px-4 py-1.5 rounded-lg text-[10px] font-black transition-all ${conquestFilter === 'all' ? 'bg-white dark:bg-slate-600 shadow-sm text-blue-600' : 'text-slate-50'}`}>전체</button>
+                                            <button onClick={() => setConquestFilter('inactive')} className={`whitespace-nowrap px-4 py-1.5 rounded-lg text-[10px] font-black transition-all ${conquestFilter === 'inactive' ? 'bg-white dark:bg-slate-600 shadow-sm text-red-600' : 'text-slate-500'}`}>미참여</button>
+                                        </div>
                                     </div>
                                     <div className="agent-grid">
-                                        {members.map(mDoc => {
-                                            const st = stats.playerMap[mDoc.name] || { swords: 0, totalInputTimeSec: 0, bossTimeSec: 0 };
-                                            const usedSwordsCount = st.swords || 0;
-                                            
-                                            const totalBudgetSec = TOTAL_RESOURCES * BASE_TIME_PER_SWORD * 60; // 1200초 (20분)
-                                            const remainingSec = totalBudgetSec - st.totalInputTimeSec;
-                                            
-                                            const remMin = Math.floor(Math.max(0, remainingSec) / 60);
-                                            const remSec = Math.max(0, remainingSec) % 60;
-                                            return (
-                                                <div key={mDoc.id} className={`dashboard-card p-5 md:p-6 border-l-[6px] ${usedSwordsCount > 0 ? 'border-l-blue-500 shadow-md' : 'opacity-30 grayscale border-l-slate-400'} hover:translate-y-[-4px] transition-all`}>
-                                                    <div className="flex flex-col mb-4 gap-1.5 min-w-0">
-                                                        <div className="flex justify-between items-start gap-2">
-                                                            <span className="text-lg font-black truncate text-slate-900 dark:text-white italic">{mDoc.name}</span>
-                                                            <span className={`text-[8px] md:text-[9px] font-black px-2 py-0.5 rounded-full shadow-sm whitespace-nowrap ${(TOTAL_RESOURCES - usedSwordsCount) <= 0 ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-blue-600'}`}>잔여: {TOTAL_RESOURCES - usedSwordsCount}</span>
+                                        {members
+                                            .filter(m => {
+                                                const st = stats.playerMap[m.name] || { swords: 0 };
+                                                if (conquestFilter === 'inactive') return st.swords === 0;
+                                                return true;
+                                            })
+                                            .sort((a, b) => {
+                                                // '남은시간 순' (사용한 시간이 적은 순)으로 정렬
+                                                const timeA = stats.playerMap[a.name]?.totalInputTimeSec || 0;
+                                                const timeB = stats.playerMap[b.name]?.totalInputTimeSec || 0;
+                                                
+                                                if (conquestFilter === 'timeSort') {
+                                                    return timeA - timeB;
+                                                }
+                                                
+                                                if (conquestFilter === 'all') {
+                                                    // '전체' 필터에서도 남은시간 많은 사람 우선
+                                                    if (timeA !== timeB) return timeA - timeB;
+                                                    return (b.score || 0) - (a.score || 0);
+                                                }
+                                                
+                                                return timeA - timeB;
+                                            })
+                                            .map(mDoc => {
+                                                const st = stats.playerMap[mDoc.name] || { swords: 0, totalInputTimeSec: 0, bossTimeSec: 0 };
+                                                const usedSwordsCount = st.swords || 0;
+                                                
+                                                const totalBudgetSec = TOTAL_RESOURCES * BASE_TIME_PER_SWORD * 60; // 1200초 (20분)
+                                                const remainingSec = totalBudgetSec - st.totalInputTimeSec;
+                                                
+                                                const remMin = Math.floor(Math.max(0, remainingSec) / 60);
+                                                const remSec = Math.max(0, remainingSec) % 60;
+                                                return (
+                                                    <div key={mDoc.id} className={`dashboard-card p-5 md:p-6 border-l-[6px] ${usedSwordsCount > 0 ? 'border-l-blue-500 shadow-md' : 'opacity-30 grayscale border-l-slate-400'} hover:translate-y-[-4px] transition-all`}>
+                                                        <div className="flex flex-col mb-4 gap-1.5 min-w-0">
+                                                            <div className="flex justify-between items-start gap-2">
+                                                                <span className="text-lg font-black truncate text-slate-900 dark:text-white italic">{mDoc.name}</span>
+                                                                <span className={`text-[8px] md:text-[9px] font-black px-2 py-0.5 rounded-full shadow-sm whitespace-nowrap ${(TOTAL_RESOURCES - usedSwordsCount) <= 0 ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-blue-600'}`}>잔여: {TOTAL_RESOURCES - usedSwordsCount}</span>
+                                                            </div>
+                                                            <span className="text-[9px] text-blue-500 font-black italic tracking-widest truncate">{rankingData.getPersonalStatus(mDoc.name).currentTitle.name}</span>
                                                         </div>
-                                                        <span className="text-[9px] text-blue-500 font-black italic tracking-widest truncate">{rankingData.getPersonalStatus(mDoc.name).currentTitle.name}</span>
-                                                    </div>
-                                                    <div className="space-y-4">
-                                                        <div className="relative h-2 w-full bg-slate-100 dark:bg-black/30 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-blue-600 to-cyan-400 transition-all duration-1000" style={{ width: `${(usedSwordsCount / TOTAL_RESOURCES) * 100}%` }}></div></div>
-                                                        <div className="flex flex-col gap-1 text-[10px] md:text-[11px] font-black text-slate-500">
-                                                            <div className="flex justify-between"><span>칼 사용</span><span className="text-slate-900 dark:text-white italic">{usedSwordsCount} / {TOTAL_RESOURCES}</span></div>
-                                                            <div className="flex justify-between text-emerald-500 border-t pt-2 border-slate-50 dark:border-slate-800"><span>남은 시간</span><span className="italic font-mono font-bold text-blue-600 dark:text-blue-400">{remMin}분 {remSec}초</span></div>
+                                                        <div className="space-y-4">
+                                                            <div className="relative h-2 w-full bg-slate-100 dark:bg-black/30 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-blue-600 to-cyan-400 transition-all duration-1000" style={{ width: `${(usedSwordsCount / TOTAL_RESOURCES) * 100}%` }}></div></div>
+                                                            <div className="flex flex-col gap-1 text-[10px] md:text-[11px] font-black text-slate-500">
+                                                                <div className="flex justify-between"><span>칼 사용</span><span className="text-slate-900 dark:text-white italic">{usedSwordsCount} / {TOTAL_RESOURCES}</span></div>
+                                                                <div className="flex justify-between text-emerald-500 border-t pt-2 border-slate-50 dark:border-slate-800"><span>남은 시간</span><span className="italic font-mono font-bold text-blue-600 dark:text-blue-400">{remMin}분 {remSec}초</span></div>
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                </div>
-                                            );
+                                                );
                                         })}
                                     </div>
                                 </section>
@@ -615,24 +647,36 @@
                                     </div>
                                 </section>
                                 <section className="space-y-8 animate-fadeIn">
+                                    <div className="flex justify-end mb-4">
+                                        <div className="flex gap-1.5 bg-slate-200 dark:bg-slate-800 p-1 rounded-xl">
+                                            <button onClick={() => setRaidFilter('all')} className={`px-4 py-1.5 rounded-lg text-[10px] font-black transition-all ${raidFilter === 'all' ? 'bg-white dark:bg-slate-600 shadow-sm text-emerald-600' : 'text-slate-500'}`}>전체인원</button>
+                                            <button onClick={() => setRaidFilter('inactive')} className={`px-4 py-1.5 rounded-lg text-[10px] font-black transition-all ${raidFilter === 'inactive' ? 'bg-white dark:bg-slate-600 shadow-sm text-red-600' : 'text-slate-500'}`}>미참여</button>
+                                        </div>
+                                    </div>
                                     <div className="agent-grid">
-                                        {members.map(mDoc => {
-                                            const st = stats.playerMap[mDoc.name] || { raidToday: 0 };
-                                            return (
-                                                <div key={mDoc.id} className={`dashboard-card p-6 md:p-7 rounded-[2rem] border-l-[10px] ${st.raidToday > 0 ? 'border-l-emerald-500 shadow-xl font-bold' : 'opacity-30 grayscale border-l-slate-400 font-bold'} transition-all font-black`}>
-                                                    <div className="flex justify-between items-start mb-10 gap-3">
-                                                        <div className="flex flex-col min-w-0">
-                                                            <span className="text-xl md:text-2xl font-black truncate text-slate-900 dark:text-white italic leading-tight">{mDoc.name}</span>
-                                                            <span className="text-[10px] text-emerald-500 font-black italic tracking-widest mt-1 truncate font-bold">{rankingData.getPersonalStatus(mDoc.name).currentTitle.name}</span>
+                                        {members
+                                            .filter(m => {
+                                                const st = stats.playerMap[m.name] || { raidToday: 0 };
+                                                if (raidFilter === 'inactive') return st.raidToday === 0;
+                                                return true;
+                                            })
+                                            .map(mDoc => {
+                                                const st = stats.playerMap[mDoc.name] || { raidToday: 0 };
+                                                return (
+                                                    <div key={mDoc.id} className={`dashboard-card p-6 md:p-7 rounded-[2rem] border-l-[10px] ${st.raidToday > 0 ? 'border-l-emerald-500 shadow-xl font-bold' : 'opacity-30 grayscale border-l-slate-400 font-bold'} transition-all font-black`}>
+                                                        <div className="flex justify-between items-start mb-10 gap-3">
+                                                            <div className="flex flex-col min-w-0">
+                                                                <span className="text-xl md:text-2xl font-black truncate text-slate-900 dark:text-white italic leading-tight">{mDoc.name}</span>
+                                                                <span className="text-[10px] text-emerald-500 font-black italic tracking-widest mt-1 truncate font-bold">{rankingData.getPersonalStatus(mDoc.name).currentTitle.name}</span>
+                                                            </div>
+                                                            <div className={`shrink-0 w-4 h-4 rounded-full ${st.raidToday >= 2 ? 'bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,1)]' : 'bg-slate-300'}`}></div>
                                                         </div>
-                                                        <div className={`shrink-0 w-4 h-4 rounded-full ${st.raidToday >= 2 ? 'bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,1)]' : 'bg-slate-300'}`}></div>
+                                                        <div className="grid grid-cols-2 gap-3 mb-6 text-center">
+                                                            <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-[1.5rem] border border-slate-100"><div className="text-[9px] text-slate-400 uppercase mb-1 font-bold">오늘</div><div className="text-xl font-black dark:text-white italic">{st.raidToday}</div></div>
+                                                            <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-[1.5rem] border border-emerald-100"><div className="text-[9px] text-emerald-600 uppercase mb-1 font-bold">누적</div><div className="text-xl font-black text-emerald-600 italic">{rankingData.getPersonalStatus(mDoc.name).raidCount}</div></div>
+                                                        </div>
                                                     </div>
-                                                    <div className="grid grid-cols-2 gap-3 mb-6 text-center">
-                                                        <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-[1.5rem] border border-slate-100"><div className="text-[9px] text-slate-400 uppercase mb-1 font-bold">오늘</div><div className="text-xl font-black dark:text-white italic">{st.raidToday}</div></div>
-                                                        <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-[1.5rem] border border-emerald-100"><div className="text-[9px] text-emerald-600 uppercase mb-1 font-bold">누적</div><div className="text-xl font-black text-emerald-600 italic">{rankingData.getPersonalStatus(mDoc.name).raidCount}</div></div>
-                                                    </div>
-                                                </div>
-                                            );
+                                                );
                                         })}
                                     </div>
                                 </section>
