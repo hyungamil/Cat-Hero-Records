@@ -9,52 +9,45 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
         
         :root {
             --brand-primary: #2563eb;
-            --brand-slate: #f8fafc;
-            --brand-dark: #0f172a;
         }
 
         body { 
             font-family: 'Noto Sans KR', 'Inter', sans-serif; 
             transition: background-color 0.2s, color 0.2s;
-            background-color: #f1f5f9; 
+            background-color: #F8FAFC; 
+            color: #0F172A;
             letter-spacing: -0.025em;
             -webkit-tap-highlight-color: transparent;
             overflow-x: hidden;
             width: 100%;
         }
 
-        .dark body { background-color: #020617; }
+        .dark body { 
+            background-color: #0B1220; 
+            color: #F8FAFC;
+        }
 
         .dashboard-card { 
-            border-radius: 0.75rem; 
-            background: #ffffff;
-            border: 1px solid #e2e8f0;
+            border-radius: 1rem; 
+            background: #FFFFFF;
+            border: 1px solid #E2E8F0;
             box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
             transition: background-color 0.2s, border-color 0.2s;
         }
 
         .dark .dashboard-card {
-            background-color: #1e293b;
+            background-color: #1E293B;
             border-color: #334155;
-            color: #f1f5f9;
+            color: #F8FAFC;
         }
 
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        
-        @keyframes marquee {
-            0% { transform: translateX(0); }
-            100% { transform: translateX(-50%); }
-        }
-        .animate-marquee {
-            display: inline-block;
-            white-space: nowrap;
-            animation: marquee 30s linear infinite;
-        }
 
         .app-container {
             width: 100%;
@@ -70,42 +63,25 @@
         }
 
         @media (min-width: 768px) {
-            .agent-grid {
-                grid-template-columns: repeat(2, 1fr);
-                gap: 1.25rem;
-            }
+            .agent-grid { grid-template-columns: repeat(2, 1fr); gap: 1.25rem; }
         }
 
         @media (min-width: 1024px) {
-            .desktop-layout {
-                display: grid;
-                grid-template-columns: 380px 1fr;
-                gap: 1.5rem;
-                align-items: start;
-            }
+            .desktop-layout { display: grid; grid-template-columns: 380px 1fr; gap: 1.5rem; align-items: start; }
         }
 
-        .main-tab-active {
-            background-color: var(--brand-primary);
-            color: white;
-            box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
-        }
-
-        .custom-modal-overlay {
-            background-color: rgba(0, 0, 0, 0.7);
-            backdrop-filter: blur(8px);
-        }
+        .main-tab-active { background-color: var(--brand-primary); color: white; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2); }
+        .custom-modal-overlay { background-color: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); }
 
         @keyframes slideUpFade {
             0% { transform: translateY(10px); opacity: 0; }
             100% { transform: translateY(0); opacity: 1; }
         }
-        .log-animate {
-            animation: slideUpFade 0.5s ease-out forwards;
-        }
+        .log-animate { animation: slideUpFade 0.5s ease-out forwards; }
+        .animate-fadeIn { animation: slideUpFade 0.3s ease-out forwards; }
     </style>
 </head>
-<body class="text-slate-900 dark:text-slate-100 font-bold">
+<body class="font-bold">
     <div id="root"></div>
 
     <script type="text/babel" data-type="module">
@@ -127,10 +103,10 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        const { useState, useEffect, useMemo } = React;
+        const { useState, useEffect, useMemo, useRef } = React;
 
         const TOTAL_RESOURCES = 10; 
-        const BASE_TIME_PER_SWORD = 2; // 1회당 2분, 총 20분
+        const BASE_TIME_PER_SWORD = 2; 
         const INITIAL_MEMBERS = ["늑대벼리", "마자유", "고기쟁이", "김동순", "일민", "캣핑", "콘스", "하늘구름바다", "창식2", "나는도비", "노들노들", "포저", "라잌늑냥", "베리발", "장귝", "유나s"];
         
         const TITLES_LIST = [
@@ -148,80 +124,62 @@
             { id: 12, name: "길드의 신", score: 10000 },
         ];
 
-        const STANDARD_REWARD_TYPES = ['장비', '레시피', '픽업', '룬 소환서', '특수룬 소환서'];
-        const EQUIP_TYPES = ['모자', '장갑', '목도리', '신발'];
-
-        const stableRandomMap = {};
-        INITIAL_MEMBERS.forEach(name => {
-            stableRandomMap[name] = Math.random();
-        });
-
-        const copyToClipboard = (text, onSuccess) => {
-            const textArea = document.createElement("textarea");
-            textArea.value = text;
-            document.body.appendChild(textArea);
-            textArea.select();
-            document.execCommand('copy');
-            document.body.removeChild(textArea);
-            if(onSuccess) onSuccess();
-        };
+        const REWARDS_LIST = ['장비', '레시피', '픽업', '룬 소환서', '특수룬 소환서'];
 
         function App() {
-            // User and system states
             const [user, setUser] = useState(null);
             const [nickname, setNickname] = useState(localStorage.getItem('cat_hero_nickname') || '');
             const [isNameSet, setIsNameSet] = useState(!!localStorage.getItem('cat_hero_nickname'));
             const [isAdminMode, setIsAdminMode] = useState(false);
             const [adminPass, setAdminPass] = useState("");
             const [showAdminEntry, setShowAdminEntry] = useState(false);
-            const [isDarkMode, setIsDarkMode] = useState(localStorage.getItem('isDarkMode') === 'true');
-            const [mainCategory, setMainCategory] = useState('conquest'); // conquest | raid | ranking | history
             
-            // Layout and view states
+            // 환경 설정 (다크모드 및 UI 스케일)
+            const [isDarkMode, setIsDarkMode] = useState(localStorage.getItem('isDarkMode') === 'true');
+            const [uiScale, setUiScale] = useState(localStorage.getItem('uiScale') || '100%');
+            const [mainCategory, setMainCategory] = useState('conquest'); // 'conquest', 'strike', 'ranking', 'history'
             const [conquestFilter, setConquestFilter] = useState('timeSort');
-            const [raidFilter, setRaidFilter] = useState('all');
-            const [selectedDiaryDate, setSelectedDiaryDate] = useState(new Date().toISOString().split('T')[0]);
-            const [selectedConquestSeasonIndex, setSelectedConquestSeasonIndex] = useState(0);
 
-            // Conquest (균격) Multiple Input states
-            const [normalMobCount, setNormalMobCount] = useState(0);
-            const [bossMobCount, setBossMobCount] = useState(0);
+            // 균격(다중) 상태
+            const [conquestNormalCount, setConquestNormalCount] = useState(0);
+            const [conquestBossCount, setConquestBossCount] = useState(0);
             const [playMin, setPlayMin] = useState(0);
             const [playSec, setPlaySec] = useState(0);
             
-            // Strike (일격) sub-tabs & calc
-            const [strikeSubTab, setStrikeSubTab] = useState('calc'); // 'calc' | 'dist' | 'report'
-            const [selectedCalcMembers, setSelectedCalcMembers] = useState([]); 
-            const [calcMemberSearch, setCalcMemberSearch] = useState('');
-            const [bossScore, setBossScore] = useState(''); // Optional Boss Score
-            
-            // Distribution states
-            const [selectedRewards, setSelectedRewards] = useState({}); // { '픽업': '2', '장비': '' }
-            const [detailedEquips, setDetailedEquips] = useState([]); // [{ type: '모자', qty: '1', id: ... }]
-            const [distResultsText, setDistResultsText] = useState(null);
-
-            // My Stats Input states
-            const [myStatVal, setMyStatVal] = useState('');
-            const [myMountVal, setMyMountVal] = useState('');
-
-            // Data streams from Firebase
+            // 데이터 연동
             const [logs, setLogs] = useState([]);
-            const [raidLogs, setRaidLogs] = useState([]);
             const [members, setMembers] = useState([]);
             const [notice, setNotice] = useState("시스템 가동 중입니다.");
             const [newNotice, setNewNotice] = useState("");
             const [newMemberName, setNewMemberName] = useState("");
-            const [timeLeftStr, setTimeLeftStr] = useState("");
+            
+            // 내정보(격추) 상태
+            const [myStat, setMyStat] = useState("");
+            const [myMount, setMyMount] = useState("");
 
-            // Modals & UI
+            // 즐겨찾기 상태
+            const [favorites, setFavorites] = useState(JSON.parse(localStorage.getItem('cat_hero_favorites')) || []);
+
             const [uiAlert, setUiAlert] = useState(null);
             const [uiConfirm, setUiConfirm] = useState(null);
-            const [showFullNotice, setShowFullNotice] = useState(false);
-            const [showFullLogs, setShowFullLogs] = useState(false);
+            const [showNoticeModal, setShowNoticeModal] = useState(false);
+            const [showHistoryModal, setShowHistoryModal] = useState(false);
+
+            // 일격 상태
+            const [strikeSubTab, setStrikeSubTab] = useState('calc'); 
+            const [bossScoreStr, setBossScoreStr] = useState("");
+            const [selectedCalcMembers, setSelectedCalcMembers] = useState([]); 
+            const [calcMemberSearch, setCalcMemberSearch] = useState(''); 
+            
+            // 분배 상태
+            const [basketItems, setBasketItems] = useState([]);
+            const [distResult, setDistResult] = useState(null);
+            const captureRef = useRef(null);
 
             const showAlert = (msg, type = 'success') => setUiAlert({ message: msg, type });
             const closeAlert = () => setUiAlert(null);
 
+            // [핵심 해결 지점] 정의되지 않았던 함수 생성
             const handleResetSession = () => {
                 setUiConfirm({ 
                     message: "길드원 정보를 초기화하고 이름 선택 화면으로 돌아가시겠습니까?", 
@@ -229,20 +187,57 @@
                         localStorage.removeItem('cat_hero_nickname'); 
                         setNickname(''); 
                         setIsNameSet(false); 
-                        window.location.reload(); 
                     } 
                 });
             };
 
-            const recentDates = useMemo(() => {
-                const dates = [];
-                for(let i=0; i<7; i++) {
-                    const d = new Date();
-                    d.setDate(d.getDate() - i);
-                    dates.push(d.toISOString().split('T')[0]);
+            const toggleFavorite = (e, targetName) => {
+                e.stopPropagation();
+                let newFavs = [...favorites];
+                if (newFavs.includes(targetName)) {
+                    newFavs = newFavs.filter(f => f !== targetName);
+                } else {
+                    newFavs.push(targetName);
                 }
-                return dates;
-            }, []);
+                setFavorites(newFavs);
+                localStorage.setItem('cat_hero_favorites', JSON.stringify(newFavs));
+            };
+
+            const getMemberGyeokchu = (m) => {
+                if (m.directGyeokchu && Number(m.directGyeokchu) > 0) return Number(m.directGyeokchu);
+                const statVal = Math.floor(Number(m.stat) || 0);
+                const mountVal = Math.floor(Number(m.mount) || 0);
+                if (statVal > 0 || mountVal > 0) return (statVal + 6 + mountVal) * 10 + 1000;
+                return 0; 
+            };
+
+            const copyToClipboard = (text) => {
+                const ta = document.createElement("textarea");
+                ta.value = text;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                showAlert("텍스트가 복사되었습니다.");
+            };
+
+            const handleCaptureImage = () => {
+                if(!captureRef.current) return;
+                setTimeout(() => {
+                    html2canvas(captureRef.current, {
+                        scale: window.devicePixelRatio || 2,
+                        useCORS: true,
+                        backgroundColor: isDarkMode ? '#0B1220' : '#F8FAFC',
+                        scrollY: -window.scrollY
+                    }).then(canvas => {
+                        const link = document.createElement('a');
+                        link.download = `분배결과_${new Date().getTime()}.png`;
+                        link.href = canvas.toDataURL('image/png');
+                        link.click();
+                        showAlert("분배 결과가 이미지로 저장되었습니다.");
+                    }).catch(e => showAlert("이미지 생성 오류", "error"));
+                }, 300); 
+            };
 
             useEffect(() => {
                 if (isDarkMode) document.documentElement.classList.add('dark');
@@ -251,32 +246,13 @@
             }, [isDarkMode]);
 
             useEffect(() => {
-                const updateTimer = () => {
-                    const now = new Date();
-                    const day = now.getDay();
-                    let target = new Date();
-                    target.setHours(8, 45, 0, 0);
-                    const daysUntilMonday = (1 + 7 - day) % 7 || 7;
-                    target.setDate(now.getDate() + daysUntilMonday);
-                    const diff = target - now;
-                    if (diff <= 0) setTimeLeftStr("시즌 종료");
-                    else {
-                        const d = Math.floor(diff / 86400000);
-                        const h = Math.floor((diff % 86400000) / 3600000);
-                        const m = Math.floor((diff % 3600000) / 60000);
-                        const s = Math.floor((diff % 60000) / 1000);
-                        setTimeLeftStr(`${d}일 ${h}:${m}:${s}`);
-                    }
-                };
-                const timerId = setInterval(updateTimer, 1000);
-                updateTimer();
-                return () => clearInterval(timerId);
-            }, []);
+                const sizeMap = { '작게': '14px', '기본': '16px', '크게': '18px', '매우 크게': '20px' };
+                document.documentElement.style.fontSize = sizeMap[uiScale] || '16px';
+                localStorage.setItem('uiScale', uiScale);
+            }, [uiScale]);
 
             useEffect(() => {
-                const initAuth = async () => {
-                    try { await signInAnonymously(auth); } catch (e) { console.error(e); } 
-                };
+                const initAuth = async () => { try { await signInAnonymously(auth); } catch (e) { console.error(e); } };
                 initAuth();
                 const unsubscribe = onAuthStateChanged(auth, setUser);
                 return () => unsubscribe();
@@ -288,253 +264,53 @@
                     if (snapshot.empty) {
                         INITIAL_MEMBERS.forEach(name => addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'members_v24'), { name, score: 0 }));
                     } else {
-                        setMembers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => (b.score || 0) - (a.score || 0)));
+                        const loaded = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => (b.score || 0) - (a.score || 0));
+                        setMembers(loaded);
+                        const me = loaded.find(m => m.name === nickname);
+                        if(me) {
+                            setMyStat(me.stat || '');
+                            setMyMount(me.mount || '');
+                        }
                     }
-                }, (error) => console.error(error));
+                });
 
                 const unsubLogs = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24'), (snapshot) => {
                     setLogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)));
-                }, (error) => console.error(error));
-
-                const unsubRaidLogs = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'raid_logs_v24'), (snapshot) => {
-                    setRaidLogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-                }, (error) => console.error(error));
+                });
 
                 const unsubSettings = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), (snapshot) => {
                     if (snapshot.exists()) setNotice(snapshot.data().notice || "");
-                }, (error) => console.error(error));
+                });
 
-                return () => { unsubMembers(); unsubLogs(); unsubRaidLogs(); unsubSettings(); };
-            }, [user]);
+                return () => { unsubMembers(); unsubLogs(); unsubSettings(); };
+            }, [user, nickname]);
 
             const rankingData = useMemo(() => {
                 const sortedByScore = [...members].sort((a, b) => (b.score || 0) - (a.score || 0));
-                const raidCounts = {};
-                raidLogs.forEach(l => { raidCounts[l.nickname] = (raidCounts[l.nickname] || 0) + Number(l.keysUsed || 0); });
-
                 const getPersonalStatus = (name) => {
                     const m = members.find(mem => mem.name === name) || { score: 0 };
                     const currentScore = m.score || 0;
                     const currentTitle = [...TITLES_LIST].reverse().find(t => currentScore >= t.score) || TITLES_LIST[0];
                     const nextTitle = TITLES_LIST.find(t => t.score > currentScore);
                     const rankIdx = sortedByScore.findIndex(mem => mem.name === name);
-                    return { currentTitle, nextTitle, score: currentScore, rank: rankIdx + 1, raidCount: raidCounts[name] || 0 };
+                    return { currentTitle, nextTitle, score: currentScore, rank: rankIdx + 1 };
                 };
-                return { weekly: sortedByScore, season: sortedByScore, getPersonalStatus };
-            }, [members, raidLogs]);
+                return { weekly: sortedByScore, getPersonalStatus };
+            }, [members]);
 
             const stats = useMemo(() => {
                 const playerMap = {};
-                members.forEach(m => playerMap[m.name] = { swords: 0, totalInputTimeSec: 0, bossTimeSec: 0, raidToday: 0 });
+                members.forEach(m => playerMap[m.name] = { swords: 0, totalInputTimeSec: 0, bossTimeSec: 0, joinedLogs: [] });
                 logs.forEach(l => { 
                     if (playerMap[l.nickname]) { 
                         playerMap[l.nickname].swords += 1; 
                         const duration = (Number(l.playMin || 0) * 60 + Number(l.playSec || 0));
                         playerMap[l.nickname].totalInputTimeSec += duration;
-                        if (l.mob === '보스') playerMap[l.nickname].bossTimeSec += duration;
+                        playerMap[l.nickname].joinedLogs.push(l);
                     } 
                 });
-                const todayStart = new Date(); todayStart.setHours(0,0,0,0);
-                raidLogs.forEach(l => { 
-                    const ld = l.timestamp?.seconds ? new Date(l.timestamp.seconds * 1000) : new Date(); 
-                    if (ld >= todayStart && playerMap[l.nickname]) playerMap[l.nickname].raidToday += Number(l.keysUsed || 0); 
-                });
                 return { playerMap };
-            }, [logs, raidLogs, members]);
-
-            const diaryHistory = useMemo(() => {
-                const getRaidReport = (targetDateStr) => {
-                    return members.map(m => {
-                        const dayLogs = raidLogs.filter(l => {
-                            const d = l.timestamp?.seconds ? new Date(l.timestamp.seconds * 1000) : new Date();
-                            return d.toISOString().split('T')[0] === targetDateStr && l.nickname === m.name;
-                        });
-                        const used = dayLogs.reduce((acc, curr) => acc + Number(curr.keysUsed), 0);
-                        return { name: m.name, used, remaining: Math.max(0, 2 - used) };
-                    }).sort((a, b) => b.remaining - a.remaining);
-                };
-
-                const getConquestSeasonsReport = () => {
-                    const seasons = [];
-                    let currentSat = new Date();
-                    const day = currentSat.getDay();
-                    const diffToSat = (day + 1) % 7; 
-                    currentSat.setDate(currentSat.getDate() - diffToSat);
-                    currentSat.setHours(9, 0, 0, 0);
-
-                    for (let i = 0; i < 4; i++) {
-                        let start = new Date(currentSat);
-                        start.setDate(currentSat.getDate() - (i * 7));
-                        let end = new Date(start);
-                        end.setDate(start.getDate() + 2);
-                        end.setHours(9, 0, 0, 0);
-
-                        const label = `${start.getMonth() + 1}/${start.getDate()} ~ ${end.getMonth() + 1}/${end.getDate()}`;
-                        const reports = members.map(m => {
-                            const seasonLogs = logs.filter(l => {
-                                const ld = l.timestamp?.seconds ? new Date(l.timestamp.seconds * 1000) : new Date();
-                                return ld >= start && ld <= end && l.nickname === m.name;
-                            });
-                            const usedSwords = seasonLogs.length;
-                            const usedSec = seasonLogs.reduce((acc, curr) => acc + (Number(curr.playMin) * 60 + Number(curr.playSec)), 0);
-                            const totalBudgetSec = TOTAL_RESOURCES * BASE_TIME_PER_SWORD * 60;
-                            const remainingSec = Math.max(0, totalBudgetSec - usedSec);
-                            return {
-                                name: m.name,
-                                usedSwords,
-                                remainingSwords: Math.max(0, TOTAL_RESOURCES - usedSwords),
-                                remainingMin: Math.floor(remainingSec / 60),
-                                remainingSec: remainingSec % 60
-                            };
-                        }).sort((a, b) => b.remainingSwords - a.remainingSwords); 
-                        seasons.push({ label, range: `${start.toLocaleString()} ~ ${end.toLocaleString()}`, reports });
-                    }
-                    return seasons;
-                };
-                return { getRaidReport, conquestSeasons: getConquestSeasonsReport() };
-            }, [logs, raidLogs, members]);
-
-            // 격추 수치 계산 도우미 함수: (스탯 + 6 + 탈것) * 10 + 1000
-            const getMemberGyeokchu = (m) => {
-                // 관리자가 직접 입력한 격추가 있다면 1순위로 사용
-                if (m.directGyeokchu && Number(m.directGyeokchu) > 0) {
-                    return Number(m.directGyeokchu);
-                }
-                // 그렇지 않다면 자동 계산식 사용
-                const statVal = Math.floor(Number(m.stat) || 0);
-                const mountVal = Math.floor(Number(m.mount) || 0);
-                if (statVal > 0 || mountVal > 0) {
-                    return (statVal + 6 + mountVal) * 10 + 1000;
-                }
-                return 0; // 등록 안됨
-            };
-
-            // 로그인 한 유저의 현재 제원을 불러와 state에 동기화
-            useEffect(() => {
-                if (nickname && members.length > 0) {
-                    const myInfo = members.find(m => m.name === nickname);
-                    if (myInfo) {
-                        setMyStatVal(myInfo.stat || '');
-                        setMyMountVal(myInfo.mount || '');
-                    }
-                }
-            }, [nickname, members]);
-
-            // 내 격추 실시간 저장
-            const handleSaveMyStats = async () => {
-                const member = members.find(m => m.name === nickname);
-                if(!member) return;
-                try {
-                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', member.id), {
-                        stat: myStatVal === '' ? null : Number(myStatVal),
-                        mount: myMountVal === '' ? null : Number(myMountVal)
-                    });
-                    showAlert("내 전투 제원이 저장되었습니다.");
-                } catch (e) {
-                    showAlert("저장 실패", "error");
-                }
-            };
-
-            const handleSubmitConquest = async (e) => {
-                e.preventDefault();
-                const totalCount = normalMobCount + bossMobCount;
-                if (!nickname || totalCount === 0) return showAlert("몬스터를 1마리 이상 지정해주세요.", "error");
-                
-                const member = members.find(m => m.name === nickname);
-                const currentSwords = stats.playerMap[nickname]?.swords || 0;
-                if (currentSwords + totalCount > TOTAL_RESOURCES) {
-                    return showAlert(`한도 초과: 잔여 칼자루(${TOTAL_RESOURCES - currentSwords}개)보다 많습니다.`, "error");
-                }
-                
-                try {
-                    const totalSec = playMin * 60 + playSec;
-                    const secPerMob = totalCount > 0 ? Math.floor(totalSec / totalCount) : 0;
-                    let remainder = totalCount > 0 ? totalSec % totalCount : 0;
-                    
-                    const batchGroupId = Date.now(); // 다중 등록 일괄 취소용 그룹 ID
-                    
-                    for(let i=0; i<normalMobCount; i++) {
-                        const m = Math.floor((secPerMob + (i === 0 ? remainder : 0)) / 60);
-                        const s = (secPerMob + (i === 0 ? remainder : 0)) % 60;
-                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24'), { nickname, mob: '일반몹', playMin: m, playSec: s, timestamp: serverTimestamp(), uid: user.uid, groupId: batchGroupId });
-                    }
-                    for(let i=0; i<bossMobCount; i++) {
-                        const m = Math.floor((secPerMob + (normalMobCount === 0 && i === 0 ? remainder : 0)) / 60);
-                        const s = (secPerMob + (normalMobCount === 0 && i === 0 ? remainder : 0)) % 60;
-                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24'), { nickname, mob: '보스', playMin: m, playSec: s, timestamp: serverTimestamp(), uid: user.uid, groupId: batchGroupId });
-                    }
-                    
-                    if (member) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', member.id), { score: (member.score || 0) + (totalCount * 5) });
-                    
-                    setPlayMin(0); setPlaySec(0); 
-                    setNormalMobCount(0); setBossMobCount(0);
-                    showAlert(`총 ${totalCount}건의 작전 보고 완료.`);
-                } catch (err) { showAlert("실패", "error"); }
-            };
-
-            const handleUndoLastConquest = async () => {
-                const myLogs = logs.filter(l => l.nickname === nickname).sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
-                const latestLogDoc = myLogs[0];
-                if (!latestLogDoc) return showAlert("취소할 최근 균격 기록이 없습니다.", "error");
-
-                setUiConfirm({
-                    message: `마지막 균격 기록을 취소하시겠습니까? (다중 등록 건일 경우 한 번에 모두 취소됩니다)`,
-                    onConfirm: async () => {
-                        try {
-                            let deletedCount = 0;
-                            if (latestLogDoc.groupId) {
-                                const logsToDelete = myLogs.filter(l => l.groupId === latestLogDoc.groupId);
-                                for (const l of logsToDelete) {
-                                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24', l.id));
-                                    deletedCount++;
-                                }
-                            } else {
-                                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24', latestLogDoc.id));
-                                deletedCount = 1;
-                            }
-                            
-                            const member = members.find(m => m.name === nickname);
-                            if (member) {
-                                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', member.id), { score: Math.max(0, (member.score || 0) - (deletedCount * 5)) });
-                            }
-                            showAlert(`마지막 균격 기록(${deletedCount}건)이 정상적으로 취소되었습니다.`);
-                        } catch (err) { showAlert("취소 실패", "error"); }
-                    }
-                });
-            };
-
-            const handleSubmitRaid = async (keys) => {
-                const member = members.find(m => m.name === nickname);
-                try {
-                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'raid_logs_v24'), { nickname, keysUsed: keys, timestamp: serverTimestamp(), uid: user.uid });
-                    if (member) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', member.id), { score: (member.score || 0) + (keys * 10) });
-                    showAlert(`${keys}개 보고 완료.`);
-                } catch (err) { showAlert("실패", "error"); }
-            };
-
-            const handleResetRaid = async () => {
-                const today = new Date(); today.setHours(0, 0, 0, 0);
-                const myLogs = raidLogs.filter(l => l.nickname === nickname && (l.timestamp?.seconds ? new Date(l.timestamp.seconds * 1000) : new Date()) >= today);
-                setUiConfirm({ message: "오늘의 기록을 초기화하시겠습니까?", onConfirm: async () => { 
-                    let totalKeys = 0;
-                    for (const l of myLogs) { totalKeys += Number(l.keysUsed); await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'raid_logs_v24', l.id)); }
-                    const member = members.find(m => m.name === nickname);
-                    if (member) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', member.id), { score: Math.max(0, (member.score || 0) - (totalKeys * 10)) });
-                    showAlert("초기화 완료"); 
-                } });
-            };
-
-            const handleUpdateAdminData = async (id, field, value) => {
-                try {
-                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', id), { [field]: value === '' ? null : Number(value) });
-                    showAlert("수정 완료");
-                } catch (e) { showAlert("실패", "error"); }
-            };
-
-            const adjustTime = (type, val) => {
-                if (type === 'min') setPlayMin(p => Math.max(0, p + val));
-                else setPlaySec(p => (p + val >= 60 ? (setPlayMin(m => m + 1), p + val - 60) : Math.max(0, p + val)));
-            };
+            }, [logs, members]);
 
             const sortedConquestMembers = useMemo(() => {
                 return members
@@ -543,39 +319,75 @@
                         return true;
                     })
                     .sort((a, b) => {
-                        if (conquestFilter === 'all') {
-                            return (stableRandomMap[a.name] || 0) - (stableRandomMap[b.name] || 0);
-                        }
+                        if (conquestFilter === 'all') return a.name.localeCompare(b.name);
                         const timeA = stats.playerMap[a.name]?.totalInputTimeSec || 0;
                         const timeB = stats.playerMap[b.name]?.totalInputTimeSec || 0;
                         return timeA - timeB; 
                     });
             }, [members, conquestFilter, stats]);
 
-            const sortedRaidMembers = useMemo(() => {
-                return members
-                    .filter(m => {
-                        if (raidFilter === 'inactive') return (stats.playerMap[m.name]?.raidToday || 0) === 0;
-                        return true;
-                    })
-                    .sort((a, b) => {
-                        if (raidFilter === 'all') {
-                            return (stableRandomMap[a.name] || 0) - (stableRandomMap[b.name] || 0);
-                        }
-                        return 0;
+            const handleSaveMyStat = async () => {
+                const member = members.find(m => m.name === nickname);
+                if (!member) return;
+                try {
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', member.id), {
+                        stat: myStat === '' ? null : Math.floor(Number(myStat)),
+                        mount: myMount === '' ? null : Math.floor(Number(myMount))
                     });
-            }, [members, raidFilter, stats]);
+                    showAlert("격추 제원이 연동되었습니다.");
+                } catch(e) { showAlert("저장 실패", "error"); }
+            };
 
-            const filteredCalcMembers = useMemo(() => {
-                return members.filter(m => {
-                    if (!calcMemberSearch) return true;
-                    return m.name.toLowerCase().includes(calcMemberSearch.toLowerCase());
+            const handleSubmitConquest = async (e) => {
+                e.preventDefault();
+                const totalCount = conquestNormalCount + conquestBossCount;
+                if (totalCount === 0 || !nickname) return showAlert("입력된 처치 마릿수가 없습니다.", "error");
+                
+                const member = members.find(m => m.name === nickname);
+                if ((stats.playerMap[nickname]?.swords || 0) + totalCount > TOTAL_RESOURCES) return showAlert(`한도(${TOTAL_RESOURCES}회) 초과 불가`, "error");
+                
+                try {
+                    const batchGroupId = `grp_${new Date().getTime()}`;
+                    for(let i=0; i<conquestNormalCount; i++){
+                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24'), { nickname, mob: '일반몹', playMin: Number(playMin), playSec: Number(playSec), groupId: batchGroupId, timestamp: serverTimestamp(), uid: user.uid });
+                    }
+                    for(let i=0; i<conquestBossCount; i++){
+                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24'), { nickname, mob: '보스', playMin: Number(playMin), playSec: Number(playSec), groupId: batchGroupId, timestamp: serverTimestamp(), uid: user.uid });
+                    }
+                    if (member) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', member.id), { score: (member.score || 0) + (totalCount * 5) });
+                    
+                    setConquestNormalCount(0); setConquestBossCount(0); setPlayMin(0); setPlaySec(0);
+                    showAlert(`총 ${totalCount}건의 작전 기록이 승인되었습니다.`);
+                } catch (err) { showAlert("실패", "error"); }
+            };
+
+            const handleUndoLastConquest = async () => {
+                const myLogs = logs.filter(l => l.nickname === nickname).sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+                if (myLogs.length === 0) return showAlert("취소할 기록이 없습니다.", "error");
+                const latestLogDoc = myLogs[0];
+                const targetGroupId = latestLogDoc.groupId;
+                
+                let targetLogs = targetGroupId ? myLogs.filter(l => l.groupId === targetGroupId) : [latestLogDoc];
+                
+                setUiConfirm({
+                    message: `마지막으로 등록한 ${targetLogs.length}건의 기록을 취소하시겠습니까?`,
+                    onConfirm: async () => {
+                        try {
+                            for(const tl of targetLogs) {
+                                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24', tl.id));
+                            }
+                            const member = members.find(m => m.name === nickname);
+                            if (member) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', member.id), { score: Math.max(0, (member.score || 0) - (targetLogs.length * 5)) });
+                            showAlert("기록이 취소되었습니다.");
+                        } catch (err) { showAlert("취소 실패", "error"); }
+                    }
                 });
-            }, [members, calcMemberSearch]);
+            };
 
             const calcStrikeReport = useMemo(() => {
                 let totalGyeokchu = 0;
                 const activeMembers = [];
+                const bScore = Number(bossScoreStr) || 0;
 
                 selectedCalcMembers.forEach(id => {
                     const m = members.find(mem => mem.id === id);
@@ -586,234 +398,170 @@
                     }
                 });
 
-                const numBossScore = Number(bossScore) || 0;
-                const expectedSeconds = (totalGyeokchu > 0 && numBossScore > 0) ? Math.ceil(numBossScore / totalGyeokchu) : 0;
+                const expectedSeconds = totalGyeokchu > 0 ? Math.ceil(bScore / totalGyeokchu) : 0;
                 
                 const individualReports = activeMembers.map(m => {
                     const rate = totalGyeokchu > 0 ? (m.gyeokchu / totalGyeokchu) * 100 : 0;
-                    const score = (totalGyeokchu > 0 && numBossScore > 0) ? Math.round(numBossScore * (m.gyeokchu / totalGyeokchu)) : 0;
+                    const score = totalGyeokchu > 0 ? Math.round(bScore * (m.gyeokchu / totalGyeokchu)) : 0;
                     return { ...m, rate: Number(rate.toFixed(2)), expectedScore: score };
                 }).sort((a, b) => b.gyeokchu - a.gyeokchu);
 
                 return { totalGyeokchu, expectedSeconds, individualReports };
-            }, [selectedCalcMembers, members, bossScore]);
+            }, [selectedCalcMembers, members, bossScoreStr]);
 
-            const handleRandomDistribute = () => {
-                const participants = calcStrikeReport.individualReports.map(r => r.name);
-                if (participants.length === 0) return showAlert("참여자를 먼저 지정해주세요.", "error");
-                
-                const standardKeys = Object.keys(selectedRewards).filter(k => selectedRewards[k] !== undefined);
-                if (standardKeys.length === 0 && detailedEquips.length === 0) return showAlert("분배할 보상을 먼저 선택해주세요.", "error");
+            const executeDistribution = (type) => {
+                if(selectedCalcMembers.length === 0) return showAlert("참여 길드원이 없습니다.", "error");
+                if(basketItems.length === 0) return showAlert("등록된 보상이 없습니다.", "error");
 
-                let results = {};
-                participants.forEach(p => results[p] = {});
+                let resultArr = [];
+                const pNames = selectedCalcMembers.map(id => members.find(m => m.id === id)?.name).filter(Boolean);
 
-                // 일반 보상 분배 (장비는 낱개 분배, 나머지는 1명 독식 일괄)
-                standardKeys.forEach(itemName => {
-                    if (itemName === '장비') {
-                        const qty = selectedRewards[itemName] === '' ? 1 : Math.max(1, Number(selectedRewards[itemName]));
-                        for(let i=0; i<qty; i++) {
-                            const winner = participants[Math.floor(Math.random() * participants.length)];
-                            results[winner][itemName] = (results[winner][itemName] || 0) + 1;
+                if (type === 'random') {
+                    basketItems.forEach(item => {
+                        if (item.name === '장비') {
+                            for(let i=0; i<item.qty; i++){
+                                const winner = pNames[Math.floor(Math.random() * pNames.length)];
+                                resultArr.push({ itemStr: '장비', winner });
+                            }
+                        } else {
+                            const winner = pNames[Math.floor(Math.random() * pNames.length)];
+                            resultArr.push({ itemStr: `${item.name} (일괄)`, winner });
                         }
-                    } else {
-                        const winner = participants[Math.floor(Math.random() * participants.length)];
-                        const displayQty = selectedRewards[itemName] ? ` (값:${selectedRewards[itemName]})` : '';
-                        const keyName = `${itemName}${displayQty} (일괄)`;
-                        results[winner][keyName] = (results[winner][keyName] || 0) + 1;
-                    }
-                });
-
-                // 상세 지정 장비 보상은 낱개별로 랜덤 분배
-                detailedEquips.forEach(eq => {
-                    const qty = eq.qty === '' ? 1 : Math.max(1, Number(eq.qty));
-                    for(let i=0; i<qty; i++) {
-                        const winner = participants[Math.floor(Math.random() * participants.length)];
-                        results[winner][eq.type] = (results[winner][eq.type] || 0) + 1;
-                    }
-                });
-
-                let textOutput = `[무작위 랜덤 분배 결과]\n`;
-                participants.forEach(p => {
-                    const items = Object.keys(results[p]).map(k => `${k} ${results[p][k]}개`);
-                    if(items.length > 0) textOutput += `${p} ➔ ${items.join(', ')}\n`;
-                });
-                
-                setDistResultsText(textOutput);
-                showAlert("무작위 랜덤 분배 완료");
-            };
-
-            const handleRateDistribute = () => {
-                if (calcStrikeReport.individualReports.length === 0) return showAlert("참여자를 먼저 지정해주세요.", "error");
-                
-                const standardKeys = Object.keys(selectedRewards).filter(k => selectedRewards[k] !== undefined);
-                if (standardKeys.length === 0 && detailedEquips.length === 0) return showAlert("분배할 보상을 먼저 선택해주세요.", "error");
-
-                let textOutput = `[기여도 기반 분배 결과]\n`;
-
-                // 해밀턴 방식(최대 잔여율) 배분 알고리즘
-                const allocateByRate = (totalQty) => {
-                    let allocations = calcStrikeReport.individualReports.map(r => ({ name: r.name, qty: 0, remainder: 0, rate: r.rate }));
-                    let remainingQty = totalQty;
-                    // 1차 분배: 정수 몫
-                    allocations.forEach(a => {
-                        const exact = (totalQty * a.rate) / 100;
-                        a.qty = Math.floor(exact);
-                        a.remainder = exact - a.qty;
-                        remainingQty -= a.qty;
                     });
-                    // 2차 분배: 나머지 큰 순서대로
-                    allocations.sort((a, b) => b.remainder - a.remainder);
-                    for(let i=0; i<remainingQty; i++) {
-                        allocations[i % allocations.length].qty += 1;
-                    }
-                    return allocations.sort((a,b) => b.qty - a.qty);
-                };
+                } else if (type === 'contrib') {
+                    if(calcStrikeReport.individualReports.length === 0) return showAlert("격추 데이터가 없습니다.", "error");
+                    basketItems.forEach(item => {
+                        let totalQty = item.qty;
+                        let remain = totalQty;
+                        let fractions = [];
+                        
+                        calcStrikeReport.individualReports.forEach(r => {
+                            const alloc = totalQty * (r.rate / 100);
+                            const base = Math.floor(alloc);
+                            remain -= base;
+                            fractions.push({ name: r.name, frac: alloc - base, base });
+                        });
+                        
+                        fractions.sort((a,b) => b.frac - a.frac);
+                        for(let i=0; i<remain; i++){ fractions[i].base += 1; }
+                        
+                        fractions.forEach(f => {
+                            if(f.base > 0) resultArr.push({ itemStr: `${item.name} x${f.base}`, winner: f.name });
+                        });
+                    });
+                }
 
-                standardKeys.forEach(itemName => {
-                    const qty = selectedRewards[itemName] === '' ? 1 : Math.max(1, Number(selectedRewards[itemName]));
-                    if (qty > 1) {
-                        textOutput += `\n[${itemName} x${qty}]\n`;
-                        const allocs = allocateByRate(qty);
-                        allocs.forEach(a => { if(a.qty > 0) textOutput += `${a.name} : ${a.qty}개\n`; });
-                    } else {
-                        // 수량이 1이거나 생략된 경우 기여도 1위에게 지급
-                        textOutput += `\n[${itemName} 일괄]\n`;
-                        if(calcStrikeReport.individualReports.length > 0) {
-                            textOutput += `${calcStrikeReport.individualReports[0].name} : 1개\n`;
-                        }
-                    }
-                });
-
-                detailedEquips.forEach(eq => {
-                    const qty = eq.qty === '' ? 1 : Math.max(1, Number(eq.qty));
-                    textOutput += `\n[상세 장비: ${eq.type} x${qty}]\n`;
-                    const allocs = allocateByRate(qty);
-                    allocs.forEach(a => { if(a.qty > 0) textOutput += `${a.name} : ${a.qty}개\n`; });
-                });
-
-                setDistResultsText(textOutput);
-                showAlert("기여도 분배 산출 완료");
+                setDistResult({ type: type === 'random' ? '무작위 랜덤 분배' : '기여도 기반 분배', list: resultArr });
             };
-
-            const latestLog = useMemo(() => logs[0] || null, [logs]);
-            const myStatusObj = rankingData.getPersonalStatus(nickname);
-            const myExpectedGyeokchu = (Math.floor(Number(myStatVal)||0) + 6 + Math.floor(Number(myMountVal)||0)) * 10 + 1000;
 
             let pageContent;
-            if (!isNameSet) {
+
+            // [관리자 모드를 최우선으로 검사하여 무한 로딩/튕김 버그 완전 해결]
+            if (isAdminMode) {
                 pageContent = (
-                    <div className="min-h-screen flex items-center justify-center p-4 bg-slate-200 dark:bg-slate-950 transition-colors">
-                        <div className="dashboard-card p-10 md:p-12 w-full max-sm:px-6 max-w-sm text-center shadow-2xl border-t-8 border-blue-600 animate-fadeIn font-bold">
-                            {notice && (
-                                <div className="mb-6 bg-blue-50 dark:bg-blue-900/30 p-4 rounded-xl border border-blue-100 dark:border-blue-800">
-                                    <h4 className="text-[10px] text-blue-600 dark:text-blue-400 uppercase tracking-widest font-black mb-1"><i className="fas fa-bullhorn mr-1"></i>공지사항</h4>
-                                    <p className="text-xs text-blue-800 dark:text-blue-200">{notice}</p>
-                                </div>
-                            )}
-                            <h1 className="text-2xl font-black text-blue-600 mb-1 uppercase italic">GUILD HQ</h1>
-                            <p className="text-[10px] text-slate-400 mb-10 tracking-[0.2em]">Personnel Verification</p>
-                            <div className="space-y-6 text-left">
-                                <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase ml-1 mb-2 block">길드원 인증</label>
-                                <select className="w-full p-4 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 outline-none rounded-xl font-black text-slate-900 dark:text-white" value={nickname} onChange={e => setNickname(e.target.value)}>
-                                    <option value="" className="bg-white dark:bg-slate-800 text-slate-400 dark:text-slate-500">본인 성명을 선택하십시오</option>
-                                    {members.map(m => (
-                                        <option key={m.id} value={m.name} className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">{m.name}</option>
-                                    ))}
-                                </select>
-                                <button onClick={() => { if(nickname) { localStorage.setItem('cat_hero_nickname', nickname); setIsNameSet(true); } }} className="w-full bg-blue-600 text-white font-black py-4 rounded-xl shadow-lg hover:bg-blue-700 active:scale-95 transition-all">대시보드 접속</button>
-                                <button onClick={() => setShowAdminEntry(true)} className="w-full text-center text-[9px] text-slate-400 font-bold uppercase mt-6">Administrator Portal</button>
-                            </div>
-                        </div>
-                    </div>
-                );
-            } else if (isAdminMode) {
-                pageContent = (
-                    <div className="fixed inset-0 z-[400] overflow-y-auto bg-slate-100 dark:bg-slate-950 p-4 md:p-8 animate-fadeIn text-slate-900 dark:text-slate-100 font-bold">
+                    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 p-4 md:p-8 animate-fadeIn text-slate-900 dark:text-slate-100 font-bold">
                         <div className="max-w-6xl mx-auto dashboard-card p-6 md:p-8 border-t-8 border-slate-800 shadow-2xl">
                             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4 border-b pb-6 dark:border-slate-700">
                                 <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center text-slate-800 dark:text-slate-200 font-bold"><i className="fas fa-shield-alt"></i></div>
-                                    <h2 className="text-xl md:text-2xl font-black italic text-slate-900 dark:text-white">관리 센터</h2>
+                                    <h2 className="text-xl md:text-2xl font-black italic">관리 센터</h2>
                                 </div>
-                                <button onClick={() => { setIsAdminMode(false); }} className="w-full md:w-auto px-6 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl font-black shadow-sm text-slate-900 dark:text-white uppercase text-xs">나가기</button>
+                                <button onClick={() => setIsAdminMode(false)} className="px-6 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 rounded-xl font-black shadow-sm text-slate-900 dark:text-white uppercase text-xs">나가기</button>
                             </div>
                             
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-                                <section>
-                                    <label className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3 block">전체 공지사항 (모든 화면 상단 고정)</label>
-                                    <div className="flex gap-2">
-                                        <textarea className="flex-1 p-3 border-2 border-slate-100 dark:border-slate-800 rounded-xl outline-none focus:border-blue-500 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white font-bold h-24 resize-none" value={newNotice} onChange={e => setNewNotice(e.target.value)} placeholder="실시간 공지 입력" />
-                                        <button onClick={async () => { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { notice: newNotice }); showAlert("반영됨"); }} className="px-5 bg-blue-600 text-white rounded-xl font-black shadow-lg">송출</button>
-                                    </div>
-                                </section>
-                                <section>
-                                    <label className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3 block">데이터 관리 도구</label>
-                                    <div className="flex flex-col gap-3">
-                                        <button onClick={() => {
-                                            let text = `[길드 현황 요약]\n\n■ 균격 미참여자:\n`;
-                                            members.forEach(m => { if ((stats.playerMap[m.name]?.swords || 0) === 0) text += `- ${m.name}\n`; });
-                                            text += `\n■ 일격 미참여자:\n`;
-                                            members.forEach(m => { if ((stats.playerMap[m.name]?.raidToday || 0) === 0) text += `- ${m.name}\n`; });
-                                            copyToClipboard(text, () => showAlert("미참여자 명단이 복사되었습니다."));
-                                        }} className="w-full flex items-center justify-center gap-2 p-4 bg-slate-50 dark:bg-slate-900 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl text-slate-900 dark:text-white text-xs uppercase"><i className="fas fa-copy"></i> 미참여자 명단 복사</button>
-                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                            <button onClick={() => setUiConfirm({ message: "균격 기록을 삭제합니까?", onConfirm: async () => { const snap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24')); for (const d of snap.docs) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24', d.id)); showAlert("균격 초기화 완료"); } })} className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900 rounded-xl text-blue-600 dark:text-blue-400 text-[10px] uppercase">기록(균격) 초기화</button>
-                                            <button onClick={() => setUiConfirm({ message: "일격 기록을 삭제합니까?", onConfirm: async () => { const snap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'raid_logs_v24')); for (const d of snap.docs) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'raid_logs_v24', d.id)); showAlert("일격 초기화 완료"); } })} className="p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-900 rounded-xl text-orange-600 dark:text-orange-400 text-[10px] uppercase">기록(일격) 초기화</button>
-                                            <button onClick={() => setUiConfirm({ message: "랭킹 점수를 초기화합니까?", onConfirm: async () => { for (const m of members) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', m.id), { score: 0 }); showAlert("점수 초기화 완료"); } })} className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900 rounded-xl text-red-600 dark:text-red-400 text-[10px] uppercase">랭킹(점수) 초기화</button>
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                <div className="space-y-8">
+                                    <section>
+                                        <label className="text-[10px] text-slate-400 uppercase tracking-widest mb-3 block font-bold">전체 공지사항 (모든 화면 상단 노출)</label>
+                                        <div className="flex gap-2">
+                                            <input type="text" className="flex-1 p-3 border-2 border-slate-100 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm outline-none focus:border-blue-500" value={newNotice} onChange={e => setNewNotice(e.target.value)} placeholder="모든 길드원에게 노출될 공지사항" />
+                                            <button onClick={async () => { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { notice: newNotice }); showAlert("반영됨"); }} className="px-5 bg-blue-600 text-white rounded-xl font-black shadow-lg">송출</button>
                                         </div>
+                                    </section>
+                                    
+                                    <section>
+                                        <label className="text-[10px] text-slate-400 uppercase tracking-widest mb-3 block font-bold">데이터 관리 도구</label>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <button onClick={() => setUiConfirm({ message: "균격 기록을 삭제합니까?", onConfirm: async () => { const snap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24')); for (const d of snap.docs) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24', d.id)); showAlert("균격 초기화 완료"); } })} className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900 rounded-xl text-blue-600 dark:text-blue-400 text-xs font-black uppercase">기록(균격) 초기화</button>
+                                            <button onClick={() => setUiConfirm({ message: "랭킹 점수를 초기화합니까?", onConfirm: async () => { for (const m of members) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', m.id), { score: 0 }); showAlert("점수 초기화 완료"); } })} className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900 rounded-xl text-red-600 dark:text-red-400 text-xs font-black uppercase">랭킹(점수) 초기화</button>
+                                        </div>
+                                    </section>
+                                </div>
+                                
+                                <section>
+                                    <label className="text-[10px] text-slate-400 uppercase tracking-widest mb-3 block font-bold">인원 및 스탯 직접 관리 ({members.length})</label>
+                                    <div className="flex gap-2 mb-4">
+                                        <input type="text" className="flex-1 p-3 border-2 border-slate-100 dark:border-slate-800 rounded-xl outline-none focus:border-blue-500 bg-white dark:bg-slate-900 text-sm" value={newMemberName} onChange={e => setNewMemberName(e.target.value)} placeholder="신규 길드원 이름" />
+                                        <button onClick={async () => { if(!newMemberName) return; await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'members_v24'), { name: newMemberName, score: 0 }); setNewMemberName(""); showAlert("추가됨"); }} className="px-5 bg-slate-800 dark:bg-slate-700 text-white rounded-xl font-bold">추가</button>
+                                    </div>
+                                    <div className="max-h-[400px] overflow-y-auto divide-y dark:divide-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-900 shadow-inner no-scrollbar">
+                                        {members.map(m => (
+                                            <div key={m.id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors flex flex-col gap-3">
+                                                <div className="flex justify-between items-center">
+                                                    <span className="font-black text-blue-600 dark:text-blue-400"><i className="fas fa-user-shield mr-2 text-slate-400"></i>{m.name}</span>
+                                                    <button onClick={() => setUiConfirm({ message: `${m.name} 님을 삭제합니까?`, onConfirm: async () => { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', m.id)); } })} className="text-red-500 text-xs"><i className="fas fa-trash"></i></button>
+                                                </div>
+                                                <div className="grid grid-cols-4 gap-2 text-[10px]">
+                                                    <div className="flex flex-col"><span className="text-slate-400 mb-1">스탯 정수</span><input type="number" className="w-full p-1.5 border rounded text-center dark:bg-slate-800" defaultValue={m.stat||''} onBlur={(e) => updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', m.id), { stat: e.target.value?Number(e.target.value):null })} /></div>
+                                                    <div className="flex flex-col"><span className="text-slate-400 mb-1">탈것 값</span><input type="number" className="w-full p-1.5 border rounded text-center dark:bg-slate-800" defaultValue={m.mount||''} onBlur={(e) => updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', m.id), { mount: e.target.value?Number(e.target.value):null })} /></div>
+                                                    <div className="flex flex-col"><span className="text-amber-500 mb-1">격추 직접입력</span><input type="number" className="w-full p-1.5 border border-amber-200 rounded text-center dark:bg-slate-800 text-amber-600" defaultValue={m.directGyeokchu||''} onBlur={(e) => updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', m.id), { directGyeokchu: e.target.value?Number(e.target.value):null })} /></div>
+                                                    <div className="flex flex-col"><span className="text-slate-400 mb-1">점수</span><input type="number" className="w-full p-1.5 border rounded text-center dark:bg-slate-800 font-bold text-blue-600" defaultValue={m.score||0} onBlur={(e) => updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', m.id), { score: Number(e.target.value) })} /></div>
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
                                 </section>
                             </div>
-                            <section>
-                                <label className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3 block">길드원 관리 (인원, 점수, 직접 격추) - {members.length}명</label>
-                                <div className="flex gap-2 mb-4 max-w-sm">
-                                    <input type="text" className="flex-1 p-2.5 border-2 border-slate-100 dark:border-slate-800 rounded-xl outline-none focus:border-blue-500 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm font-bold" value={newMemberName} onChange={e => setNewMemberName(e.target.value)} placeholder="새 길드원 이름" />
-                                    <button onClick={async () => { if(!newMemberName) return; await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'members_v24'), { name: newMemberName, score: 0 }); setNewMemberName(""); showAlert("추가됨"); }} className="px-5 bg-slate-800 dark:bg-slate-700 text-white rounded-xl font-bold">추가</button>
+                        </div>
+                    </div>
+                );
+            } else if (!isNameSet) {
+                pageContent = (
+                    <div className="min-h-screen flex flex-col p-4 bg-slate-200 dark:bg-slate-950 transition-colors">
+                        {notice && (
+                            <div className="w-full max-w-sm mx-auto mb-6 bg-blue-600 dark:bg-blue-800 text-white p-3 rounded-xl shadow-lg flex items-center justify-between cursor-pointer" onClick={() => setShowNoticeModal(true)}>
+                                <div className="flex items-center gap-3 truncate">
+                                    <i className="fas fa-bullhorn animate-pulse"></i>
+                                    <span className="text-xs font-black truncate">{notice}</span>
                                 </div>
-                                <div className="overflow-x-auto w-full border-2 border-slate-100 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-900 shadow-inner">
-                                    <table className="w-full text-left text-xs whitespace-nowrap">
-                                        <thead className="bg-slate-50 dark:bg-slate-800 border-b dark:border-slate-700 text-[10px] text-slate-500 uppercase tracking-widest">
-                                            <tr>
-                                                <th className="p-4">이름</th>
-                                                <th className="p-4 w-24">점수</th>
-                                                <th className="p-4 w-24 text-blue-500">스탯(자동계산)</th>
-                                                <th className="p-4 w-24 text-blue-500">탈것(자동계산)</th>
-                                                <th className="p-4 w-32 text-emerald-500">강제 격추(1순위)</th>
-                                                <th className="p-4 w-16 text-center">삭제</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y dark:divide-slate-800">
-                                            {members.map(m => (
-                                                <tr key={m.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                                                    <td className="p-4 font-black">{m.name}</td>
-                                                    <td className="p-2"><input type="number" className="w-full p-2 border dark:border-slate-700 rounded bg-transparent outline-none text-center" defaultValue={m.score || 0} onBlur={(e) => handleUpdateAdminData(m.id, 'score', e.target.value)} /></td>
-                                                    <td className="p-2"><input type="number" placeholder="생략" className="w-full p-2 border dark:border-slate-700 rounded bg-transparent outline-none text-center" defaultValue={m.stat || ''} onBlur={(e) => handleUpdateAdminData(m.id, 'stat', e.target.value)} /></td>
-                                                    <td className="p-2"><input type="number" placeholder="생략" className="w-full p-2 border dark:border-slate-700 rounded bg-transparent outline-none text-center" defaultValue={m.mount || ''} onBlur={(e) => handleUpdateAdminData(m.id, 'mount', e.target.value)} /></td>
-                                                    <td className="p-2"><input type="number" placeholder="직접입력" className="w-full p-2 border dark:border-slate-700 rounded bg-transparent outline-none text-center text-emerald-600 font-bold" defaultValue={m.directGyeokchu || ''} onBlur={(e) => handleUpdateAdminData(m.id, 'directGyeokchu', e.target.value)} /></td>
-                                                    <td className="p-2 text-center"><button onClick={async () => { setUiConfirm({ message: `${m.name} 님을 삭제합니까?`, onConfirm: async () => { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', m.id)); showAlert("완료"); } }); }} className="text-red-500 p-2"><i className="fas fa-trash"></i></button></td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                            </div>
+                        )}
+                        <div className="flex-1 flex items-center justify-center pb-20">
+                            <div className="dashboard-card p-10 md:p-12 w-full max-w-sm text-center shadow-2xl border-t-8 border-blue-600 animate-fadeIn font-bold">
+                                <h1 className="text-3xl font-black text-blue-600 dark:text-blue-400 mb-1 uppercase italic">GUILD HQ</h1>
+                                <p className="text-[10px] text-slate-400 mb-10 tracking-[0.2em]">Personnel Verification</p>
+                                <div className="space-y-6 text-left">
+                                    <label className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase ml-1 mb-2 block">길드원 인증</label>
+                                    <select className="w-full p-4 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 outline-none rounded-xl font-black text-slate-900 dark:text-white" value={nickname} onChange={e => setNickname(e.target.value)}>
+                                        <option value="" className="text-slate-400">본인 성명을 선택하십시오</option>
+                                        {members.map(m => (
+                                            <option key={m.id} value={m.name} className="text-slate-900 dark:text-white">{m.name}</option>
+                                        ))}
+                                    </select>
+                                    <button onClick={() => { if(nickname) { localStorage.setItem('cat_hero_nickname', nickname); setIsNameSet(true); } }} className="w-full bg-blue-600 text-white font-black py-4 rounded-xl shadow-lg hover:bg-blue-700 active:scale-95 transition-all text-lg">대시보드 접속</button>
+                                    <button onClick={() => setShowAdminEntry(true)} className="w-full text-center text-[10px] text-slate-400 font-bold uppercase mt-6 hover:text-blue-500">Administrator Portal</button>
                                 </div>
-                            </section>
+                            </div>
                         </div>
                     </div>
                 );
             } else {
+                const myStatusObj = rankingData.getPersonalStatus(nickname);
+                const latestLog = logs[0] || null;
+                
+                const filteredCalcMembers = [...members]
+                    .filter(m => !calcMemberSearch || m.name.toLowerCase().includes(calcMemberSearch.toLowerCase()))
+                    .sort((a,b) => {
+                        const aFav = favorites.includes(a.name);
+                        const bFav = favorites.includes(b.name);
+                        if(aFav && !bFav) return -1;
+                        if(!aFav && bFav) return 1;
+                        return a.name.localeCompare(b.name);
+                    });
+
                 pageContent = (
                     <div className="app-container">
-                        {notice && (
-                            <div className="bg-blue-600 text-white p-3 flex justify-between items-center shadow-md relative z-40">
-                                <div className="flex items-center gap-2 truncate text-xs font-black">
-                                    <i className="fas fa-bullhorn animate-pulse"></i>
-                                    <span className="truncate">{notice}</span>
-                                </div>
-                                <button onClick={() => setShowFullNotice(true)} className="text-[10px] bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg whitespace-nowrap ml-4">공지 전체 보기</button>
-                            </div>
-                        )}
-                        <header className="bg-white dark:bg-slate-900 p-4 border-b-2 border-slate-100 dark:border-slate-800 sticky top-0 z-30 shadow-sm text-slate-900 dark:text-white">
+                        <header className="bg-white dark:bg-slate-900 p-4 border-b-2 border-slate-100 dark:border-slate-800 sticky top-0 z-30 shadow-sm">
                             <div className="flex justify-between items-center gap-4">
                                 <div className="flex items-center gap-2 md:gap-3">
                                     <button onClick={handleResetSession} className="w-10 h-10 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-500 hover:text-red-500 transition-all shadow-sm flex items-center justify-center font-bold">
@@ -821,10 +569,10 @@
                                     </button>
                                     <div className="space-y-1">
                                         <div className="flex gap-1 md:gap-2 overflow-x-auto no-scrollbar pb-1">
-                                            <button onClick={() => setMainCategory('conquest')} className={`px-2.5 py-1.5 rounded-lg text-[10px] md:text-xs font-black whitespace-nowrap transition-all ${mainCategory === 'conquest' ? 'main-tab-active shadow-[0_0_15px_rgba(37,99,235,0.3)]' : 'bg-slate-50 dark:bg-slate-800 text-slate-400'}`}>01. 균격</button>
-                                            <button onClick={() => setMainCategory('raid')} className={`px-2.5 py-1.5 rounded-lg text-[10px] md:text-xs font-black whitespace-nowrap transition-all ${mainCategory === 'raid' ? 'main-tab-active shadow-[0_0_15px_rgba(37,99,235,0.3)]' : 'bg-slate-50 dark:bg-slate-800 text-slate-400'}`}>02. 일격</button>
-                                            <button onClick={() => setMainCategory('ranking')} className={`px-2.5 py-1.5 rounded-lg text-[10px] md:text-xs font-black whitespace-nowrap transition-all ${mainCategory === 'ranking' ? 'main-tab-active bg-yellow-500 border-yellow-600 text-white' : 'bg-slate-50 dark:bg-slate-800 text-slate-400'}`}>03. 랭킹</button>
-                                            <button onClick={() => setMainCategory('history')} className={`px-2.5 py-1.5 rounded-lg text-[10px] md:text-xs font-black whitespace-nowrap transition-all ${mainCategory === 'history' ? 'main-tab-active bg-pink-500 border-pink-600 text-white shadow-[0_0_15px_rgba(236,72,153,0.3)]' : 'bg-slate-50 dark:bg-slate-800 text-slate-400'}`}>04. 기록</button>
+                                            <button onClick={() => setMainCategory('conquest')} className={`px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black whitespace-nowrap transition-all ${mainCategory === 'conquest' ? 'main-tab-active' : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>01. 균격</button>
+                                            <button onClick={() => setMainCategory('strike')} className={`px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black whitespace-nowrap transition-all ${mainCategory === 'strike' ? 'main-tab-active' : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>02. 일격</button>
+                                            <button onClick={() => setMainCategory('ranking')} className={`px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black whitespace-nowrap transition-all ${mainCategory === 'ranking' ? 'main-tab-active bg-yellow-500 border-yellow-600 text-white' : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>03. 랭킹</button>
+                                            <button onClick={() => setMainCategory('history')} className={`px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black whitespace-nowrap transition-all ${mainCategory === 'history' ? 'main-tab-active bg-pink-500 border-pink-600 text-white' : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>04. 기록</button>
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shrink-0"></span>
@@ -833,70 +581,82 @@
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <button onClick={() => setShowAdminEntry(true)} className="w-9 h-9 border dark:border-slate-700 rounded-xl flex items-center justify-center text-slate-400 hover:text-blue-500 transition-colors shadow-sm relative">
-                                        <i className="fas fa-cog"></i>
-                                    </button>
+                                    <select className="hidden sm:block text-[10px] p-2 bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-lg outline-none font-bold text-slate-500" value={uiScale} onChange={e => setUiScale(e.target.value)}>
+                                        {['작게', '기본', '크게', '매우 크게'].map(s => <option key={s} value={s}>{s}</option>)}
+                                    </select>
+                                    <button onClick={() => setShowAdminEntry(true)} className="w-9 h-9 border dark:border-slate-700 rounded-xl flex items-center justify-center text-slate-400 hover:text-blue-500 transition-colors shadow-sm"><i className="fas fa-cog"></i></button>
                                     <button onClick={() => setIsDarkMode(!isDarkMode)} className="w-9 h-9 border dark:border-slate-700 rounded-xl flex items-center justify-center text-slate-400 hover:text-yellow-500 shadow-sm"><i className={`fas ${isDarkMode ? 'fa-sun' : 'fa-moon'}`}></i></button>
                                 </div>
                             </div>
                         </header>
 
+                        {notice && (
+                            <div className="bg-blue-600 dark:bg-blue-800 text-white p-3 md:px-8 cursor-pointer flex justify-between items-center shadow-md mb-2" onClick={() => setShowNoticeModal(true)}>
+                                <div className="flex items-center gap-3 truncate max-w-full">
+                                    <i className="fas fa-bullhorn text-yellow-300 animate-pulse shrink-0"></i>
+                                    <span className="text-xs font-black truncate">{notice}</span>
+                                </div>
+                                <span className="text-[10px] ml-4 bg-white/20 px-2 py-0.5 rounded shrink-0 hover:bg-white/40">전체보기</span>
+                            </div>
+                        )}
+
                         <main className="p-4 md:p-8 mb-32">
-                            {}
                             {mainCategory === 'conquest' && (
                                 <div className="desktop-layout">
                                     <aside className="space-y-6">
-                                        <div className="dashboard-card p-5 space-y-4 relative">
-                                            <div className="flex justify-between items-center">
+                                        <div className="dashboard-card p-5 space-y-4">
+                                            <div className="flex justify-between items-center border-b dark:border-slate-800 pb-3">
                                                 <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2"><i className="fas fa-broadcast-tower text-red-500 animate-pulse"></i> 실시간 처치 기록</h3>
-                                                <button onClick={() => setShowFullLogs(true)} className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-500 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition-colors">전체 보기</button>
+                                                <button onClick={() => setShowHistoryModal(true)} className="text-[10px] text-blue-500 font-bold hover:underline">전체 보기</button>
                                             </div>
                                             <div className="space-y-2.5 max-h-[150px] overflow-y-auto no-scrollbar">
                                                 {logs.slice(0, 5).map((l, idx) => (
-                                                    <div key={idx} className="text-[10px] leading-relaxed border-b border-slate-50 dark:border-slate-800/50 pb-1.5 animate-fadeIn break-words">
-                                                        <span className="text-blue-500 dark:text-blue-400 font-black">[{l.nickname}]</span> {l.mob} 처치 성공
+                                                    <div key={idx} className="text-[10px] leading-relaxed border-b border-slate-50 dark:border-slate-800/50 pb-1.5 animate-fadeIn">
+                                                        <span className="text-blue-500 dark:text-blue-400 font-black">[{l.nickname}]</span> {l.mob} 성공 <span className="text-slate-400 ml-1">({l.playMin}m {l.playSec}s)</span>
                                                     </div>
                                                 ))}
                                                 {logs.length === 0 && <p className="text-[10px] text-slate-400 text-center py-4">활동 기록 대기 중...</p>}
                                             </div>
                                         </div>
+                                        
                                         <form onSubmit={handleSubmitConquest} className="dashboard-card p-6 md:p-8 space-y-6 text-slate-900 dark:text-white border-l-[8px] border-blue-500">
-                                            <h2 className="text-lg uppercase italic border-b pb-4 dark:border-slate-700 font-bold">균격 기록</h2>
-                                            <div className="space-y-4">
-                                                <label className="text-[10px] text-slate-400 uppercase tracking-widest block mb-2 font-bold">01. 대상 및 수량 지정 (다중 등록 지원)</label>
-                                                <div className="flex flex-col gap-3">
-                                                    <div className="flex items-center justify-between p-3.5 rounded-xl border-2 border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
-                                                        <span className="text-sm font-black text-slate-700 dark:text-slate-200 flex items-center gap-2"><i className="fas fa-ghost text-slate-400"></i>일반몹</span>
-                                                        <div className="flex items-center gap-4">
-                                                            <button type="button" onClick={() => setNormalMobCount(p => Math.max(0, p - 1))} className="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 text-slate-500 font-black shadow-sm border border-slate-200 dark:border-slate-700">-</button>
-                                                            <span className="font-mono font-black text-xl w-6 text-center dark:text-white">{normalMobCount}</span>
-                                                            <button type="button" onClick={() => setNormalMobCount(p => p + 1)} className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-black shadow-sm border border-blue-200 dark:border-blue-800">+</button>
-                                                        </div>
+                                            <h2 className="text-lg uppercase italic border-b pb-4 dark:border-slate-700 font-bold">균격 기록 다중 등록</h2>
+                                            
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border dark:border-slate-800 flex flex-col items-center gap-3">
+                                                    <span className="text-xs font-black text-slate-500">일반몹</span>
+                                                    <div className="flex items-center gap-3 bg-white dark:bg-slate-800 rounded-xl p-1 shadow-sm border dark:border-slate-700">
+                                                        <button type="button" onClick={() => setConquestNormalCount(p => Math.max(0, p-1))} className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-600 dark:text-slate-300 font-black">-</button>
+                                                        <span className="w-6 text-center font-mono font-black text-lg">{conquestNormalCount}</span>
+                                                        <button type="button" onClick={() => setConquestNormalCount(p => p+1)} className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 text-blue-600 dark:text-blue-400 font-black">+</button>
                                                     </div>
-                                                    <div className="flex items-center justify-between p-3.5 rounded-xl border-2 border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
-                                                        <span className="text-sm font-black text-slate-700 dark:text-slate-200 flex items-center gap-2"><i className="fas fa-skull text-red-400"></i>보스</span>
-                                                        <div className="flex items-center gap-4">
-                                                            <button type="button" onClick={() => setBossMobCount(p => Math.max(0, p - 1))} className="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 text-slate-500 font-black shadow-sm border border-slate-200 dark:border-slate-700">-</button>
-                                                            <span className="font-mono font-black text-xl w-6 text-center dark:text-white">{bossMobCount}</span>
-                                                            <button type="button" onClick={() => setBossMobCount(p => p + 1)} className="w-8 h-8 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 font-black shadow-sm border border-red-200 dark:border-red-800">+</button>
-                                                        </div>
+                                                </div>
+                                                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border dark:border-slate-800 flex flex-col items-center gap-3">
+                                                    <span className="text-xs font-black text-red-500">보스</span>
+                                                    <div className="flex items-center gap-3 bg-white dark:bg-slate-800 rounded-xl p-1 shadow-sm border dark:border-slate-700">
+                                                        <button type="button" onClick={() => setConquestBossCount(p => Math.max(0, p-1))} className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-600 dark:text-slate-300 font-black">-</button>
+                                                        <span className="w-6 text-center font-mono font-black text-lg">{conquestBossCount}</span>
+                                                        <button type="button" onClick={() => setConquestBossCount(p => p+1)} className="w-8 h-8 rounded-lg bg-red-100 dark:bg-red-900/30 hover:bg-red-200 text-red-600 dark:text-red-400 font-black">+</button>
                                                     </div>
                                                 </div>
                                             </div>
+
                                             <div className="bg-slate-900 rounded-[2rem] p-6 text-center border border-slate-800">
-                                                <div className="text-4xl md:text-5xl font-black text-white italic mb-8 font-mono">{String(playMin).padStart(2, '0')}<span className="text-blue-500 mx-1.5">:</span>{String(playSec).padStart(2, '0')}</div>
+                                                <span className="text-[10px] text-slate-400 block mb-2 font-bold">1회당 시간 (공통 반영)</span>
+                                                <div className="text-4xl md:text-5xl font-black text-white italic mb-6 font-mono">{String(playMin).padStart(2, '0')}<span className="text-blue-500 mx-1.5">:</span>{String(playSec).padStart(2, '0')}</div>
                                                 <div className="grid grid-cols-3 gap-2">
                                                     {[1, 10, 1].map((v, i) => (
-                                                        <button key={i} type="button" onClick={() => adjustTime(i===0?'min':'sec', v)} className="bg-white/10 p-2.5 rounded-lg text-[10px] font-black text-white">+{v}{i===0?'분':'초'}</button>
+                                                        <button key={`plus${i}`} type="button" onClick={() => setPlayMin(p => i===0 ? p+v : p)} className="bg-white/10 p-2.5 rounded-lg text-[10px] font-black text-white">+{v}{i===0?'분':'초'}</button>
                                                     ))}
                                                     {[-1, -10, -1].map((v, i) => (
-                                                        <button key={i} type="button" onClick={() => adjustTime(i===0?'min':'sec', v)} className="bg-red-500/10 p-2.5 rounded-lg text-[10px] font-black text-red-400">{-v}{i===0?'분':'초'}</button>
+                                                        <button key={`minus${i}`} type="button" onClick={() => setPlayMin(p => i===0 ? Math.max(0, p+v) : p)} className="bg-red-500/10 p-2.5 rounded-lg text-[10px] font-black text-red-400">{-v}{i===0?'분':'초'}</button>
                                                     ))}
                                                 </div>
                                             </div>
+
                                             <div className="flex flex-col gap-3">
-                                                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-6 rounded-2xl font-black text-xl shadow-lg shadow-blue-500/20 transition-all active:scale-95 uppercase italic border-b-4 border-blue-800">제출 승인</button>
-                                                <button type="button" onClick={handleUndoLastConquest} className="w-full bg-slate-100 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-950/20 text-red-500 border border-slate-200 dark:border-slate-700 py-3.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all">마지막 균격 기록 취소</button>
+                                                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-6 rounded-2xl font-black text-xl shadow-lg shadow-blue-500/20 transition-all active:scale-95 uppercase italic border-b-4 border-blue-800">총 {conquestNormalCount + conquestBossCount}건 제출 승인</button>
+                                                <button type="button" onClick={handleUndoLastConquest} className="w-full bg-slate-100 dark:bg-slate-800 hover:bg-red-50 text-red-500 border border-slate-200 dark:border-slate-700 py-3.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all">마지막 균격 기록 취소</button>
                                             </div>
                                         </form>
                                     </aside>
@@ -912,23 +672,22 @@
                                         </div>
                                         <div className="agent-grid">
                                             {sortedConquestMembers.map(mDoc => {
-                                                const st = stats.playerMap[mDoc.name] || { swords: 0, totalInputTimeSec: 0, bossTimeSec: 0 };
+                                                const st = stats.playerMap[mDoc.name] || { swords: 0, totalInputTimeSec: 0 };
                                                 const usedSwordsCount = st.swords || 0;
                                                 const totalBudgetSec = TOTAL_RESOURCES * BASE_TIME_PER_SWORD * 60; 
                                                 const remainingSec = Math.max(0, totalBudgetSec - st.totalInputTimeSec);
-                                                const remMin = Math.floor(remainingSec / 60);
-                                                const remSec = remainingSec % 60;
                                                 const isInactive = usedSwordsCount === 0;
+                                                
                                                 return (
                                                     <div key={mDoc.id} className={`dashboard-card p-5 md:p-6 border-l-[6px] ${!isInactive ? 'border-l-blue-500 shadow-md' : 'border-l-slate-300 dark:border-l-slate-700 bg-slate-50/50 dark:bg-slate-800/40'} hover:translate-y-[-4px] transition-all`}>
-                                                        <div className="flex flex-col mb-4 gap-1.5 min-w-0">
+                                                        <div className="flex flex-col mb-4 gap-1.5">
                                                             <div className="flex justify-between items-start gap-2">
-                                                                <span className={`text-lg font-black break-words italic ${!isInactive ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300'}`}>{mDoc.name}</span>
+                                                                <span className={`text-lg font-black break-words italic ${!isInactive ? 'text-slate-900 dark:text-slate-100' : 'text-slate-600 dark:text-slate-300'}`}>{mDoc.name}</span>
                                                                 <span className={`text-[8px] md:text-[9px] font-black px-2 py-0.5 rounded-full shadow-sm whitespace-nowrap shrink-0 ${isInactive ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500' : (TOTAL_RESOURCES - usedSwordsCount) <= 0 ? 'bg-red-50 dark:bg-red-950/30 text-red-500' : 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400'}`}>
                                                                     {isInactive ? '미참여' : `잔여: ${TOTAL_RESOURCES - usedSwordsCount}`}
                                                                 </span>
                                                             </div>
-                                                            <span className={`text-[9px] font-black italic tracking-widest break-words ${!isInactive ? 'text-blue-500 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}>
+                                                            <span className={`text-[9px] font-black italic tracking-widest break-words ${!isInactive ? 'text-blue-500 dark:text-blue-300' : 'text-slate-400 dark:text-slate-400'}`}>
                                                                 {rankingData.getPersonalStatus(mDoc.name).currentTitle.name}
                                                             </span>
                                                         </div>
@@ -936,14 +695,10 @@
                                                             <div className="relative h-2 w-full bg-slate-100 dark:bg-black/30 rounded-full overflow-hidden">
                                                                 <div className={`h-full ${!isInactive ? 'bg-gradient-to-r from-blue-600 to-cyan-400' : 'bg-slate-300 dark:bg-slate-700'} transition-all duration-1000`} style={{ width: `${(usedSwordsCount / TOTAL_RESOURCES) * 100}%` }}></div>
                                                             </div>
-                                                            <div className={`flex flex-col gap-1 text-[10px] md:text-[11px] font-black ${!isInactive ? 'text-slate-500 dark:text-slate-400' : 'text-slate-400 dark:text-slate-500'}`}>
-                                                                <div className="flex justify-between">
-                                                                    <span>칼 사용</span>
-                                                                    <span className={!isInactive ? 'text-slate-900 dark:text-white italic' : ''}>{(usedSwordsCount)} / {TOTAL_RESOURCES}</span>
-                                                                </div>
+                                                            <div className={`flex flex-col gap-1 text-[10px] md:text-[11px] font-black ${!isInactive ? 'text-slate-500 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500'}`}>
+                                                                <div className="flex justify-between"><span>칼 사용</span><span className={!isInactive ? 'text-slate-900 dark:text-slate-100 italic' : ''}>{(usedSwordsCount)} / {TOTAL_RESOURCES}</span></div>
                                                                 <div className={`flex justify-between border-t pt-2 ${!isInactive ? 'text-emerald-500 border-slate-50 dark:border-slate-800' : 'text-slate-400 dark:text-slate-500 border-slate-100 dark:border-slate-800/40'}`}>
-                                                                    <span>남은 시간</span>
-                                                                    <span className={`italic font-mono ${!isInactive ? 'text-blue-600 dark:text-blue-400' : ''}`}>{remMin}분 {remSec}초</span>
+                                                                    <span>남은 시간</span><span className={`italic font-mono ${!isInactive ? 'text-blue-600 dark:text-blue-400' : ''}`}>{Math.floor(remainingSec / 60)}분 {remainingSec % 60}초</span>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -955,61 +710,48 @@
                                 </div>
                             )}
 
-                            {}
-                            {mainCategory === 'raid' && (
+                            {mainCategory === 'strike' && (
                                 <div className="space-y-6">
-                                    <div className="flex flex-wrap justify-center gap-3 mb-8 bg-slate-200 dark:bg-slate-800/80 p-2 rounded-2xl w-fit mx-auto shadow-sm">
-                                        <button onClick={() => setStrikeSubTab('calc')} className={`px-5 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${strikeSubTab === 'calc' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-md' : 'text-slate-500 dark:text-slate-400'}`}><i className="fas fa-calculator"></i>격전지 추가 점수(격추)</button>
-                                        <button onClick={() => setStrikeSubTab('dist')} className={`px-5 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${strikeSubTab === 'dist' ? 'bg-white dark:bg-slate-700 text-amber-500 dark:text-amber-400 shadow-md' : 'text-slate-500 dark:text-slate-400'}`}><i className="fas fa-gift"></i>격전지 분배 시스템</button>
-                                        <button onClick={() => setStrikeSubTab('report')} className={`px-5 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${strikeSubTab === 'report' ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-md' : 'text-slate-500 dark:text-slate-400'}`}><i className="fas fa-key"></i>일격 열쇠 보고 (기존)</button>
+                                    <div className="flex justify-center gap-4 mb-8 bg-slate-200 dark:bg-slate-800/80 p-1.5 rounded-2xl w-fit mx-auto shadow-sm">
+                                        <button onClick={() => setStrikeSubTab('calc')} className={`px-6 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${strikeSubTab === 'calc' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-md' : 'text-slate-500 dark:text-slate-400'}`}><i className="fas fa-calculator"></i>격전지 추가 점수(격추)</button>
+                                        <button onClick={() => setStrikeSubTab('dist')} className={`px-6 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${strikeSubTab === 'dist' ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-md' : 'text-slate-500 dark:text-slate-400'}`}><i className="fas fa-gift"></i>격전지 분배 시스템</button>
                                     </div>
 
-                                    {strikeSubTab === 'calc' && (
-                                        <div className="space-y-8 animate-fadeIn max-w-5xl mx-auto">
-                                            {/* 본인 전용 전투 제원 입력 패널 */}
-                                            <div className="dashboard-card p-6 md:p-8 bg-gradient-to-r from-blue-600 to-indigo-700 text-white shadow-xl relative overflow-hidden">
-                                                <div className="absolute top-0 right-0 opacity-10 pointer-events-none"><i className="fas fa-khanda text-9xl"></i></div>
-                                                <div className="relative z-10 flex flex-col md:flex-row gap-8 justify-between items-center">
-                                                    <div className="space-y-2 text-center md:text-left">
-                                                        <span className="text-[10px] text-blue-200 uppercase tracking-widest font-bold">Personal Stats</span>
-                                                        <h2 className="text-xl md:text-2xl font-black italic">{nickname}님의 격추</h2>
-                                                        <p className="text-xs text-blue-100">입력 시 즉시 자동 계산되어 서버에 저장됩니다.</p>
+                                    {strikeSubTab === 'calc' ? (
+                                        <div className="space-y-8 animate-fadeIn">
+                                            {/* 본인 스탯 수정 패널 */}
+                                            <div className="dashboard-card p-6 border-l-[6px] border-blue-500 bg-blue-50/30 dark:bg-blue-900/10">
+                                                <div className="flex items-center gap-2 mb-4">
+                                                    <i className="fas fa-user-shield text-blue-500"></i>
+                                                    <h3 className="font-black text-sm text-slate-800 dark:text-white">{nickname}님의 격추</h3>
+                                                </div>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 items-end">
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] text-slate-500 font-bold">스탯 값 입력</label>
+                                                        <input type="number" className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none font-mono text-xs focus:border-blue-500" value={myStat} onChange={e => setMyStat(e.target.value.replace(/[^0-9]/g, ''))} placeholder="정수" />
                                                     </div>
-                                                    <div className="flex gap-4 items-center">
-                                                        <div className="space-y-1">
-                                                            <label className="text-[10px] text-blue-200 block text-center">스탯 값 입력</label>
-                                                            <input type="number" className="w-24 p-2.5 rounded-xl bg-white/20 border border-white/30 text-white outline-none focus:bg-white/30 text-center font-mono font-bold" value={myStatVal} onChange={e => { setMyStatVal(e.target.value.replace(/[^0-9]/g, '')); }} onBlur={handleSaveMyStats} placeholder="0" />
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] text-slate-500 font-bold">탈것 값 입력</label>
+                                                        <input type="number" className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none font-mono text-xs focus:border-blue-500" value={myMount} onChange={e => setMyMount(e.target.value.replace(/[^0-9]/g, ''))} placeholder="정수" />
+                                                    </div>
+                                                    <div className="flex gap-2 h-[42px]">
+                                                        <div className="flex-1 bg-slate-900 text-white rounded-lg flex items-center justify-center text-xs font-mono font-bold shadow-inner">
+                                                            예상: {getMemberGyeokchu({stat: myStat, mount: myMount}).toLocaleString()}
                                                         </div>
-                                                        <div className="space-y-1">
-                                                            <label className="text-[10px] text-blue-200 block text-center">탈것 값 입력</label>
-                                                            <input type="number" className="w-24 p-2.5 rounded-xl bg-white/20 border border-white/30 text-white outline-none focus:bg-white/30 text-center font-mono font-bold" value={myMountVal} onChange={e => { setMyMountVal(e.target.value.replace(/[^0-9]/g, '')); }} onBlur={handleSaveMyStats} placeholder="0" />
-                                                        </div>
-                                                        <div className="text-2xl font-black text-white/50">=</div>
-                                                        <div className="space-y-1">
-                                                            <label className="text-[10px] text-yellow-300 block text-center">예상 격추</label>
-                                                            <div className="w-28 p-2.5 rounded-xl bg-slate-900/50 border border-slate-900/50 text-yellow-400 text-center font-mono font-black">{myExpectedGyeokchu.toLocaleString()}</div>
-                                                        </div>
+                                                        <button onClick={handleSaveMyStat} className="px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-black shadow-md shrink-0">저장</button>
                                                     </div>
                                                 </div>
                                             </div>
 
                                             <div className="dashboard-card p-6 md:p-8 space-y-8">
-                                                <div>
-                                                    <h2 className="text-xl font-black italic text-blue-600 dark:text-blue-400 flex items-center gap-2"><i className="fas fa-calculator"></i>격전지 추가 점수(격추)</h2>
-                                                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">타 길드원의 격추는 연산에만 사용되며, 스탯은 본인만 수정 가능합니다. 몬스터 점수 입력은 선택사항입니다.</p>
-                                                </div>
-
                                                 <div className="space-y-3">
-                                                    <label className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-widest block font-bold">1단계: 몬스터 체력(점수) 값 입력 (선택사항)</label>
-                                                    <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
-                                                        <div className="flex gap-2 w-full md:w-1/2">
-                                                            <input type="number" className="flex-1 p-3.5 bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-blue-500 font-mono text-lg font-bold text-slate-900 dark:text-white" value={bossScore} onChange={e => setBossScore(e.target.value)} placeholder="입력 생략 시 비율만 도출됨" />
-                                                            <button onClick={() => setBossScore('')} className="px-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-black hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">리셋</button>
-                                                        </div>
-                                                        <div className="flex flex-wrap gap-2 w-full md:w-1/2">
-                                                            <button onClick={() => setBossScore(prev => Number(prev||0) + 100000)} className="px-3 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-[10px] font-black font-mono">+10만</button>
-                                                            <button onClick={() => setBossScore(prev => Number(prev||0) + 500000)} className="px-3 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-[10px] font-black font-mono">+50만</button>
-                                                            <button onClick={() => setBossScore(prev => Number(prev||0) + 1000000)} className="px-3 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-[10px] font-black font-mono">+100만</button>
+                                                    <label className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-widest block font-bold">1단계: 몬스터 체력(점수) 값 입력 <span className="text-blue-500 font-normal">(선택사항)</span></label>
+                                                    <div className="flex flex-col sm:flex-row gap-3">
+                                                        <input type="number" className="flex-1 p-3.5 bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-blue-500 font-mono text-lg font-bold text-slate-900 dark:text-white" value={bossScoreStr} onChange={e => setBossScoreStr(e.target.value.replace(/[^0-9]/g, ''))} placeholder="체력 미입력 시 기여도(%)만 산출됩니다" />
+                                                        <div className="flex gap-2">
+                                                            <button onClick={() => setBossScoreStr("300000")} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-[10px] font-black hover:bg-slate-200 dark:hover:bg-slate-700">+30만</button>
+                                                            <button onClick={() => setBossScoreStr("500000")} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-[10px] font-black hover:bg-slate-200 dark:hover:bg-slate-700">+50만</button>
+                                                            <button onClick={() => setBossScoreStr("")} className="px-4 py-2 bg-red-50 dark:bg-red-900/30 text-red-500 rounded-lg text-xs font-black hover:bg-red-100">비우기</button>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1018,11 +760,14 @@
                                                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                                                         <div className="space-y-1">
                                                             <label className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-widest block font-bold">2단계: 참여 길드원 선택 ({selectedCalcMembers.length}명 지정됨)</label>
-                                                            <button onClick={() => setSelectedCalcMembers([])} className="text-[10px] text-red-500 hover:text-red-600 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded font-bold transition-colors">전체 선택 해제</button>
+                                                            <p className="text-[10px] text-slate-400">타 길드원의 격추는 연산에만 사용되며, 스탯은 본인만 수정 가능합니다.</p>
                                                         </div>
-                                                        <div className="relative w-full sm:w-60">
-                                                            <input type="text" value={calcMemberSearch} onChange={e => setCalcMemberSearch(e.target.value)} placeholder="🔍 길드원 이름 검색" className="w-full p-2 pl-8 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:border-blue-500 text-slate-900 dark:text-white font-bold" />
-                                                            <i className="fas fa-search absolute left-3 top-3 text-[10px] text-slate-400"></i>
+                                                        <div className="flex w-full sm:w-auto gap-2">
+                                                            <button onClick={() => setSelectedCalcMembers([])} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-[10px] font-black rounded-xl hover:bg-slate-200 shrink-0">전체 선택 해제</button>
+                                                            <div className="relative flex-1 sm:w-48">
+                                                                <input type="text" value={calcMemberSearch} onChange={e => setCalcMemberSearch(e.target.value)} placeholder="🔍 길드원 이름 검색" className="w-full p-2 pl-8 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:border-blue-500 text-slate-900 dark:text-white" />
+                                                                <i className="fas fa-search absolute left-3 top-3 text-[10px] text-slate-400"></i>
+                                                            </div>
                                                         </div>
                                                     </div>
 
@@ -1030,20 +775,22 @@
                                                         {filteredCalcMembers.map(m => {
                                                             const isSelected = selectedCalcMembers.includes(m.id);
                                                             const gyeokchu = getMemberGyeokchu(m);
-                                                            const hasStats = gyeokchu > 0;
+                                                            const isFav = favorites.includes(m.name);
                                                             return (
-                                                                <button key={m.id} type="button" onClick={() => {
-                                                                    if (isSelected) setSelectedCalcMembers(prev => prev.filter(id => id !== m.id));
-                                                                    else setSelectedCalcMembers(prev => [...prev, m.id]);
-                                                                }} className={`p-3.5 rounded-xl border-2 transition-all flex items-center gap-2 text-left min-w-0 ${isSelected ? 'border-blue-600 bg-blue-500/10 shadow-sm' : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'}`}>
-                                                                    <div className={`w-3.5 h-3.5 rounded-md border flex items-center justify-center text-[8px] text-white shrink-0 ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950'}`}>{isSelected && '✓'}</div>
-                                                                    <div className="flex flex-col min-w-0">
-                                                                        <span className={`text-xs font-black break-words ${isSelected ? 'text-blue-600 dark:text-blue-400' : 'text-slate-800 dark:text-slate-200'}`}>{m.name}</span>
-                                                                        <span className={`text-[10px] font-bold font-mono mt-0.5 ${hasStats ? 'text-slate-500 dark:text-slate-400' : 'text-red-400'}`}>
-                                                                            {hasStats ? `격추: ${gyeokchu.toLocaleString()}` : '격추 미등록'}
-                                                                        </span>
+                                                                <div key={m.id} className={`p-3.5 rounded-xl border-2 transition-all flex items-center justify-between gap-2 relative cursor-pointer ${isSelected ? 'border-blue-600 bg-blue-500/10 shadow-sm' : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-800'}`} onClick={() => setSelectedCalcMembers(p => isSelected ? p.filter(id => id !== m.id) : [...p, m.id])}>
+                                                                    <div className="flex-1 text-left min-w-0">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <div className={`w-3.5 h-3.5 rounded-md border flex items-center justify-center text-[8px] text-white shrink-0 ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950'}`}>{isSelected && '✓'}</div>
+                                                                            <span className={`text-xs font-black truncate break-words ${isSelected ? 'text-blue-600 dark:text-blue-400' : 'text-slate-800 dark:text-slate-200'}`}>{m.name}</span>
+                                                                        </div>
+                                                                        <div className={`text-[10px] font-bold font-mono mt-1 pl-5 ${gyeokchu > 0 ? 'text-slate-500 dark:text-slate-400' : 'text-red-400'}`}>
+                                                                            격추: {gyeokchu > 0 ? gyeokchu.toLocaleString() : '미등록'}
+                                                                        </div>
                                                                     </div>
-                                                                </button>
+                                                                    <button type="button" onClick={(e) => toggleFavorite(e, m.name)} className="shrink-0 p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700">
+                                                                        <i className={`fas fa-star text-xs ${isFav ? 'text-yellow-400' : 'text-slate-300 dark:text-slate-600'}`}></i>
+                                                                    </button>
+                                                                </div>
                                                             );
                                                         })}
                                                     </div>
@@ -1053,22 +800,24 @@
                                                     <div className="flex justify-between items-center">
                                                         <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2"><i className="fas fa-poll-h text-blue-500"></i>격전지 비율 최종 결과</h3>
                                                         <button onClick={() => {
-                                                            let txt = `[격전지 비율 최종 결과]\n총 격추 : ${calcStrikeReport.totalGyeokchu.toLocaleString()}\n`;
-                                                            if (Number(bossScore) > 0) txt = `[격전지 비율 최종 결과]\n몬스터 체력(점수) : ${Number(bossScore).toLocaleString()}\n예상 처치 시간 : ${Math.floor(calcStrikeReport.expectedSeconds/60)}분 ${calcStrikeReport.expectedSeconds%60}초\n총 격추 : ${calcStrikeReport.totalGyeokchu.toLocaleString()}\n`;
+                                                            let txt = `━━━━━━━━━━━━\n격전지 비율 최종 결과\n총 격추 : ${calcStrikeReport.totalGyeokchu.toLocaleString()}\n`;
+                                                            if (bossScoreStr) txt += `몬스터 체력 : ${Number(bossScoreStr).toLocaleString()}\n`;
+                                                            txt += `━━━━━━━━━━━━\n`;
                                                             calcStrikeReport.individualReports.forEach(r => {
-                                                                txt += `\n${r.name} : ${r.gyeokchu.toLocaleString()} (${r.rate}%)`;
-                                                                if(Number(bossScore) > 0) txt += ` -> 예상 점수: ${r.expectedScore.toLocaleString()}`;
+                                                                txt += `${r.name}\n기여율 : ${r.rate}% (남은 ${(100 - r.rate).toFixed(2)}%)\n`;
+                                                                if (bossScoreStr) txt += `예상 점수 : ${r.expectedScore.toLocaleString()}\n`;
                                                             });
-                                                            copyToClipboard(txt, () => showAlert("결과가 텍스트 형태로 복사되었습니다."));
-                                                        }} className="px-3 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg text-[10px] font-black hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"><i className="far fa-copy mr-1"></i>텍스트 복사</button>
+                                                            txt += `━━━━━━━━━━━━`;
+                                                            copyToClipboard(txt);
+                                                        }} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg text-[10px] font-black text-slate-600 dark:text-slate-300 transition-colors"><i className="far fa-copy mr-1"></i>텍스트 복사</button>
                                                     </div>
                                                     
                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                         <div className="p-5 rounded-2xl bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900 flex flex-col justify-between">
-                                                            <span className="text-[10px] text-blue-600 dark:text-blue-400 uppercase tracking-wider">총 격추</span>
+                                                            <span className="text-[10px] text-blue-600 dark:text-blue-400 uppercase tracking-wider">총 격추 수치</span>
                                                             <span className="text-2xl md:text-3xl font-black font-mono text-blue-700 dark:text-blue-400 mt-2">{calcStrikeReport.totalGyeokchu.toLocaleString()}</span>
                                                         </div>
-                                                        {Number(bossScore) > 0 && (
+                                                        {bossScoreStr && (
                                                             <div className="p-5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900 flex flex-col justify-between">
                                                                 <span className="text-[10px] text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">예상 처치 시간</span>
                                                                 <span className="text-2xl md:text-3xl font-black font-mono text-emerald-700 dark:text-emerald-400 mt-2">
@@ -1077,20 +826,19 @@
                                                                             {Math.floor(calcStrikeReport.expectedSeconds / 60) > 0 && `${Math.floor(calcStrikeReport.expectedSeconds / 60)}분 `}
                                                                             {calcStrikeReport.expectedSeconds % 60}초
                                                                         </>
-                                                                    ) : "-"}
+                                                                    ) : "계산 불가"}
                                                                 </span>
                                                             </div>
                                                         )}
                                                     </div>
 
                                                     <div className="overflow-x-auto border border-slate-100 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 shadow-sm mt-4">
-                                                        <table className="w-full text-left whitespace-nowrap">
+                                                        <table className="w-full text-left">
                                                             <thead className="bg-slate-50 dark:bg-slate-800 text-slate-400 text-[10px] uppercase font-bold border-b dark:border-slate-800">
                                                                 <tr>
-                                                                    <th className="px-5 py-3">길드원 명</th>
-                                                                    <th className="px-5 py-3 text-center">개인 격추</th>
-                                                                    <th className="px-5 py-3 text-center">기여율 (%)</th>
-                                                                    {Number(bossScore) > 0 && <th className="px-5 py-3 text-right">예상 점수</th>}
+                                                                    <th className="px-5 py-3 whitespace-nowrap">길드원 명</th>
+                                                                    <th className="px-5 py-3 text-center whitespace-nowrap">기여율 (%)</th>
+                                                                    <th className="px-5 py-3 text-right whitespace-nowrap">{bossScoreStr ? '예상 점수' : '개인 격추'}</th>
                                                                 </tr>
                                                             </thead>
                                                             <tbody className="divide-y dark:divide-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold">
@@ -1100,17 +848,19 @@
                                                                             {idx === 0 && <span className="text-sm">👑</span>}
                                                                             <span>{report.name}</span>
                                                                         </td>
-                                                                        <td className="px-5 py-4 text-center font-mono">{report.gyeokchu.toLocaleString()}</td>
-                                                                        <td className="px-5 py-4 text-center">
-                                                                            <span className={`px-2 py-0.5 rounded-md text-[10px] ${idx === 0 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>{report.rate}%</span>
+                                                                        <td className="px-5 py-4 text-center whitespace-nowrap">
+                                                                            <div className="flex flex-col items-center gap-1">
+                                                                                <span className={`px-2 py-0.5 rounded-md text-[10px] ${idx === 0 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>{report.rate}%</span>
+                                                                                <span className="text-[8px] text-slate-400 font-normal">(남은 {(100-report.rate).toFixed(2)}%)</span>
+                                                                            </div>
                                                                         </td>
-                                                                        {Number(bossScore) > 0 && <td className="px-5 py-4 text-right font-mono text-blue-600 dark:text-blue-400 italic">{report.expectedScore.toLocaleString()} P</td>}
+                                                                        <td className="px-5 py-4 text-right font-mono text-blue-600 dark:text-blue-400 italic">
+                                                                            {bossScoreStr ? `${report.expectedScore.toLocaleString()} P` : report.gyeokchu.toLocaleString()}
+                                                                        </td>
                                                                     </tr>
                                                                 ))}
                                                                 {calcStrikeReport.individualReports.length === 0 && (
-                                                                    <tr>
-                                                                        <td colSpan="4" className="px-5 py-8 text-center text-slate-400 dark:text-slate-500">참여시킬 길드원들을 지정해 주세요.</td>
-                                                                    </tr>
+                                                                    <tr><td colSpan="3" className="px-5 py-8 text-center text-slate-400">지정된 참여 길드원이 없습니다.</td></tr>
                                                                 )}
                                                             </tbody>
                                                         </table>
@@ -1118,50 +868,37 @@
                                                 </div>
                                             </div>
                                         </div>
-                                    )}
-
-                                    {strikeSubTab === 'dist' && (
-                                        <div className="space-y-8 animate-fadeIn max-w-5xl mx-auto">
+                                    ) : (
+                                        <div className="space-y-8 animate-fadeIn">
+                                            {/* 격전지 분배 시스템 */}
                                             <div className="dashboard-card p-6 md:p-8 space-y-8">
                                                 <div>
-                                                    <h2 className="text-xl font-black italic text-amber-500 dark:text-amber-400 flex items-center gap-2"><i className="fas fa-gift"></i>격전지 분배 시스템</h2>
-                                                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">계산기에서 지정한 길드원 정보를 그대로 가져와 실제 드랍된 보상을 즉시 공정 분배합니다.</p>
-                                                </div>
-
-                                                <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/40 p-4 rounded-xl flex items-center justify-between">
-                                                    <div className="flex items-center gap-3">
-                                                        <i className="fas fa-users text-amber-500 text-xl"></i>
-                                                        <div>
-                                                            <div className="text-[10px] text-amber-600 dark:text-amber-500 font-bold uppercase tracking-widest">선택된 참여자</div>
-                                                            <div className="text-sm font-black text-amber-800 dark:text-amber-300">{calcStrikeReport.individualReports.length} 명 대기중</div>
-                                                        </div>
-                                                    </div>
-                                                    {calcStrikeReport.individualReports.length === 0 ? (
-                                                        <button onClick={() => setStrikeSubTab('calc')} className="text-xs font-bold text-blue-500 underline">계산기로 이동</button>
-                                                    ) : (
-                                                        <div className="text-[10px] text-slate-500 font-bold truncate max-w-[200px]">
-                                                            {calcStrikeReport.individualReports.map(r=>r.name).join(', ')}
-                                                        </div>
-                                                    )}
+                                                    <h2 className="text-xl font-black italic text-emerald-600 dark:text-emerald-400 flex items-center gap-2"><i className="fas fa-gift"></i>격전지 분배 시스템</h2>
+                                                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">계산기에서 지정한 <strong>{selectedCalcMembers.length}명</strong>의 길드원 정보를 바탕으로 공정하게 분배합니다.</p>
                                                 </div>
 
                                                 <div className="space-y-4">
-                                                    <label className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-widest block font-bold">1단계: 간편 보상 선택</label>
-                                                    <p className="text-[10px] text-slate-400">장비, 레시피는 다중 분배를 위해 값을 입력할 수 있습니다. 픽업 및 소환서 종류는 값에 상관없이 랜덤 시 통째로 한 명에게 지급됩니다.</p>
-                                                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                                                        {STANDARD_REWARD_TYPES.map(reward => {
-                                                            const isChecked = selectedRewards[reward] !== undefined;
+                                                    <label className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-widest block font-bold">1단계: 보상 종류 및 수량 선택</label>
+                                                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                                                        {REWARDS_LIST.map(rName => {
+                                                            const existing = basketItems.find(b => b.name === rName);
+                                                            const isChecked = !!existing;
                                                             return (
-                                                                <div key={reward} className={`p-3 rounded-xl border-2 transition-all flex flex-col gap-2 ${isChecked ? 'border-amber-500 bg-amber-50/30 dark:bg-amber-950/20' : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50'}`}>
+                                                                <div key={rName} className={`p-3 rounded-xl border-2 transition-all flex flex-col gap-2 ${isChecked ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-900/20' : 'border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 hover:border-slate-300 dark:hover:border-slate-700'}`}>
                                                                     <label className="flex items-center gap-2 cursor-pointer">
-                                                                        <input type="checkbox" className="w-4 h-4 text-amber-500 rounded focus:ring-amber-500" checked={isChecked} onChange={(e) => {
-                                                                            if (e.target.checked) setSelectedRewards(p => ({ ...p, [reward]: '' }));
-                                                                            else { const newR = {...p}; delete newR[reward]; setSelectedRewards(newR); }
+                                                                        <input type="checkbox" className="w-4 h-4 accent-emerald-500 rounded" checked={isChecked} onChange={() => {
+                                                                            if(isChecked) setBasketItems(p => p.filter(b => b.name !== rName));
+                                                                            else setBasketItems(p => [...p, { name: rName, qty: 1 }]);
                                                                         }} />
-                                                                        <span className={`text-xs font-black ${isChecked ? 'text-amber-700 dark:text-amber-400' : 'text-slate-700 dark:text-slate-300'}`}>{reward}</span>
+                                                                        <span className={`text-xs font-black ${isChecked ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}>{rName}</span>
                                                                     </label>
                                                                     {isChecked && (
-                                                                        <input type="number" placeholder="값 입력 (생략가능)" className="w-full p-2 border rounded-md text-[10px] outline-none focus:border-amber-500 bg-white dark:bg-slate-800 dark:border-slate-700 font-bold dark:text-white" value={selectedRewards[reward] || ''} onChange={e => setSelectedRewards(p => ({ ...p, [reward]: e.target.value }))} />
+                                                                        <div className="mt-1">
+                                                                            <input type="number" min="1" className="w-full p-1.5 text-[10px] font-mono border dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-center outline-none focus:border-emerald-500" placeholder="수량 입력(생략가능)" value={existing.qty} onChange={e => {
+                                                                                const val = Math.max(1, Number(e.target.value) || 1);
+                                                                                setBasketItems(p => p.map(b => b.name === rName ? { ...b, qty: val } : b));
+                                                                            }} />
+                                                                        </div>
                                                                     )}
                                                                 </div>
                                                             );
@@ -1169,125 +906,69 @@
                                                     </div>
                                                 </div>
 
-                                                <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-                                                    <div className="flex justify-between items-center">
-                                                        <label className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-widest block font-bold">2단계: 장비 상세 지정 (선택사항)</label>
-                                                        <button type="button" onClick={() => setDetailedEquips(p => [...p, { id: Date.now(), type: '모자', qty: '' }])} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg text-[10px] font-black hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center gap-1"><i className="fas fa-plus"></i>장비 추가</button>
-                                                    </div>
-                                                    <p className="text-[10px] text-slate-400">장비 부위를 특정하고 싶은 경우에만 추가하세요. 동일한 부위라도 여러 번 추가하여 각기 다른 장비로 분배할 수 있습니다.</p>
-                                                    <div className="flex flex-col gap-2">
-                                                        {detailedEquips.map((eq, index) => (
-                                                            <div key={eq.id} className="flex gap-2 items-center p-2 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/30">
-                                                                <span className="text-[10px] font-bold text-slate-400 w-4 text-center">{index+1}</span>
-                                                                <select className="p-2 border rounded-lg text-xs outline-none bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-white font-bold" value={eq.type} onChange={e => {
-                                                                    const newEq = [...detailedEquips]; newEq[index].type = e.target.value; setDetailedEquips(newEq);
-                                                                }}>
-                                                                    {EQUIP_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                                                                </select>
-                                                                <input type="number" placeholder="값 입력 (생략시 1)" className="flex-1 p-2 border rounded-lg text-xs outline-none focus:border-amber-500 bg-white dark:bg-slate-800 dark:border-slate-700 font-bold dark:text-white" value={eq.qty} onChange={e => {
-                                                                    const newEq = [...detailedEquips]; newEq[index].qty = e.target.value; setDetailedEquips(newEq);
-                                                                }} />
-                                                                <button type="button" onClick={() => setDetailedEquips(p => p.filter((_, i) => i !== index))} className="w-8 h-8 flex items-center justify-center text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"><i className="fas fa-times"></i></button>
-                                                            </div>
-                                                        ))}
-                                                        {detailedEquips.length === 0 && (
-                                                            <div className="text-center p-4 border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-xl text-[10px] text-slate-400 font-bold">상세 장비 없음</div>
-                                                        )}
-                                                    </div>
-                                                </div>
-
                                                 <div className="space-y-4 pt-6 border-t border-slate-100 dark:border-slate-800">
-                                                    <label className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-widest block font-bold">3단계: 보상 분배 모드 선택</label>
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                        <button onClick={handleRandomDistribute} className="p-6 rounded-2xl bg-white dark:bg-slate-800 border-2 border-amber-500 text-amber-600 dark:text-amber-400 font-black flex flex-col items-center gap-3 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-all shadow-lg">
-                                                            <i className="fas fa-dice text-3xl"></i>무작위 랜덤 분배
-                                                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">선택된 보상을 무작위 확률로 균등 분배합니다.<br/>(픽업, 소환서, 레시피 등은 1명이 일괄 독식합니다)</span>
+                                                    <label className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-widest block font-bold">2단계: 보상 분배 모드 선택</label>
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                        <button onClick={() => executeDistribution('random')} className="p-6 rounded-2xl border-2 border-slate-200 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500 bg-white dark:bg-slate-900 transition-all flex flex-col items-center gap-3 group">
+                                                            <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-900/30 flex items-center justify-center text-slate-400 group-hover:text-emerald-500 transition-colors text-xl"><i className="fas fa-dice"></i></div>
+                                                            <div className="text-center">
+                                                                <h4 className="text-sm font-black text-slate-800 dark:text-slate-200">무작위 랜덤 분배</h4>
+                                                                <p className="text-[10px] text-slate-400 mt-1">확률에 따라 균등하게 랜덤 배분</p>
+                                                            </div>
                                                         </button>
-                                                        <button onClick={handleRateDistribute} className="p-6 rounded-2xl bg-white dark:bg-slate-800 border-2 border-emerald-500 text-emerald-600 dark:text-emerald-400 font-black flex flex-col items-center gap-3 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-all shadow-lg">
-                                                            <i className="fas fa-chart-pie text-3xl"></i>기여도 기반 분배
-                                                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">공략 계산기의 기여율(%)을 기준으로 값을 쪼개 분배합니다.<br/>(보상 수량이 부족하면 상위 기여자 우선 지급)</span>
+                                                        <button onClick={() => executeDistribution('contrib')} className="p-6 rounded-2xl border-2 border-slate-200 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500 bg-white dark:bg-slate-900 transition-all flex flex-col items-center gap-3 group">
+                                                            <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-900/30 flex items-center justify-center text-slate-400 group-hover:text-emerald-500 transition-colors text-xl"><i className="fas fa-chart-pie"></i></div>
+                                                            <div className="text-center">
+                                                                <h4 className="text-sm font-black text-slate-800 dark:text-slate-200">기여도 기반 분배</h4>
+                                                                <p className="text-[10px] text-slate-400 mt-1">격추 비율(%)에 맞춰 수량 배분</p>
+                                                            </div>
                                                         </button>
                                                     </div>
                                                 </div>
 
-                                                {distResultsText && (
-                                                    <div className="mt-8 p-6 bg-slate-50 dark:bg-slate-800/80 rounded-2xl text-slate-800 dark:text-slate-100 font-mono text-sm font-bold whitespace-pre-wrap leading-relaxed shadow-md border-2 border-slate-200 dark:border-slate-700 relative">
-                                                        <button onClick={() => copyToClipboard(distResultsText, () => showAlert("분배 결과가 복사되었습니다."))} className="absolute top-4 right-4 px-3 py-1.5 bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-lg text-[10px] font-black flex items-center gap-1 transition-colors border border-slate-200 dark:border-slate-600 shadow-sm"><i className="far fa-copy"></i>분배 결과 복사</button>
-                                                        <div className="pt-2">{distResultsText}</div>
+                                                {distResult && (
+                                                    <div className="mt-8 animate-fadeIn">
+                                                        <div className="flex justify-between items-end mb-3">
+                                                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 uppercase tracking-widest font-black">출력 결과물</span>
+                                                            <div className="flex gap-2">
+                                                                <button onClick={() => {
+                                                                    let txt = `━━━━━━━━━━━━\n분배 결과 (${distResult.type})\n━━━━━━━━━━━━\n`;
+                                                                    distResult.list.forEach(r => txt += `${r.itemStr} - ${r.winner}\n`);
+                                                                    txt += `━━━━━━━━━━━━`;
+                                                                    copyToClipboard(txt);
+                                                                }} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg text-[10px] font-black text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition-colors"><i className="far fa-copy mr-1"></i>텍스트 복사</button>
+                                                                <button onClick={handleCaptureImage} className="px-3 py-1.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-lg text-[10px] font-black hover:bg-emerald-200 transition-colors"><i className="fas fa-camera mr-1"></i>이미지 저장</button>
+                                                            </div>
+                                                        </div>
+                                                        <div id="dist-result-card" ref={captureRef} className="p-6 md:p-8 rounded-[2rem] bg-white dark:bg-slate-900 border-2 border-emerald-500 shadow-2xl relative overflow-hidden">
+                                                            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-emerald-400 to-teal-500"></div>
+                                                            <div className="border-b dark:border-slate-800 pb-4 mb-6">
+                                                                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 uppercase tracking-widest font-black block mb-1">최종 분배 결과</span>
+                                                                <h3 className="text-xl font-black italic text-slate-900 dark:text-white">{distResult.type}</h3>
+                                                            </div>
+
+                                                            <div className="flex flex-col gap-2">
+                                                                {distResult.list.map((r, idx) => (
+                                                                    <div key={idx} className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700">
+                                                                        <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 text-sm"><i className="fas fa-gift"></i></div>
+                                                                        <div className="flex-1 text-sm font-black text-slate-800 dark:text-slate-100 break-words">
+                                                                            <span className="text-emerald-600 dark:text-emerald-400">{r.itemStr}</span> - {r.winner}
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                            <div className="mt-6 text-right text-[9px] text-slate-400 font-mono">
+                                                                생성일시: {new Date().toLocaleString()}
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 )}
                                             </div>
                                         </div>
                                     )}
-
-                                    {strikeSubTab === 'report' && (
-                                        <div className="desktop-layout text-slate-900 dark:text-white animate-fadeIn">
-                                            <section className="mb-10">
-                                                <div className="dashboard-card p-6 md:p-10 space-y-10 border-t-[10px] border-emerald-500 shadow-2xl">
-                                                    <div className="flex justify-between items-center border-b pb-4 dark:border-slate-700">
-                                                        <h2 className="font-black text-xl italic uppercase tracking-tighter">일격 열쇠 관제 시스템</h2>
-                                                        <span className="text-[9px] text-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 px-2.5 py-1 rounded-full uppercase font-bold">ACTIVE</span>
-                                                    </div>
-                                                    <div className="p-6 md:p-10 bg-slate-50 dark:bg-slate-800/50 rounded-[2.5rem] text-center space-y-10 shadow-inner">
-                                                        <div className="space-y-2">
-                                                            <div className="text-[11px] font-black text-slate-400 uppercase tracking-[0.3em]">열쇠 소모 데이터 보고</div>
-                                                            <p className="text-[9px] text-red-500 uppercase tracking-widest italic animate-pulse">최대 2개 지급 / 6개 보관</p>
-                                                        </div>
-                                                        <button onClick={() => handleSubmitRaid(1)} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white border-b-[10px] border-emerald-800 py-10 rounded-[3rem] font-black text-3xl shadow-xl active:scale-95 active:border-b-0 active:translate-y-2 flex flex-col items-center justify-center gap-4 italic"><i className="fas fa-bolt text-yellow-300 text-4xl"></i>열쇠 승인</button>
-                                                        <div className="grid grid-cols-2 gap-3">
-                                                            <button onClick={() => {
-                                                                const today = new Date(); today.setHours(0,0,0,0);
-                                                                const myLog = raidLogs.filter(l => l.nickname === nickname && (l.timestamp?.seconds ? new Date(l.timestamp.seconds * 1000) : new Date()) >= today).sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0))[0];
-                                                                if(myLog) {
-                                                                    setUiConfirm({ message: "마지막 보고를 취소합니까?", onConfirm: async () => { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'raid_logs_v24', myLog.id)); const member = members.find(m => m.name === nickname); if(member) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', member.id), { score: Math.max(0, (member.score || 0) - (Number(myLog.keysUsed)*10)) }); showAlert("취소 완료"); } });
-                                                                }
-                                                            }} className="bg-white dark:bg-slate-700 text-red-500 border-2 border-red-100 dark:border-red-900/30 py-4.5 rounded-2xl text-xs uppercase tracking-widest font-bold">취소 (-1)</button>
-                                                            <button onClick={handleResetRaid} className="bg-slate-800 text-slate-300 border border-slate-700 py-4.5 rounded-2xl text-xs uppercase tracking-widest font-bold">전체 리셋</button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </section>
-                                            <section className="space-y-8 animate-fadeIn">
-                                                <div className="flex justify-end mb-4">
-                                                    <div className="flex gap-1.5 bg-slate-200 dark:bg-slate-800 p-1 rounded-xl">
-                                                        <button onClick={() => setRaidFilter('all')} className={`px-4 py-1.5 rounded-lg text-[10px] font-black transition-all ${raidFilter === 'all' ? 'bg-white dark:bg-slate-600 shadow-sm text-emerald-600' : 'text-slate-500 dark:text-slate-400'}`}>전체인원</button>
-                                                        <button onClick={() => setRaidFilter('inactive')} className={`px-4 py-1.5 rounded-lg text-[10px] font-black transition-all ${raidFilter === 'inactive' ? 'bg-white dark:bg-slate-600 shadow-sm text-red-600' : 'text-slate-500 dark:text-slate-400'}`}>미참여</button>
-                                                    </div>
-                                                </div>
-                                                <div className="agent-grid">
-                                                    {sortedRaidMembers.map(mDoc => {
-                                                        const st = stats.playerMap[mDoc.name] || { raidToday: 0 };
-                                                        const isInactive = st.raidToday === 0;
-                                                        return (
-                                                            <div key={mDoc.id} className={`dashboard-card p-6 md:p-7 rounded-[2rem] border-l-[10px] ${!isInactive ? 'border-l-emerald-500 shadow-xl' : 'border-l-slate-300 dark:border-l-slate-700 bg-slate-50/50 dark:bg-slate-800/40'} transition-all`}>
-                                                                <div className="flex justify-between items-start mb-10 gap-3">
-                                                                    <div className="flex flex-col min-w-0">
-                                                                        <span className={`text-xl md:text-2xl font-black break-words italic leading-tight ${!isInactive ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300'}`}>{mDoc.name}</span>
-                                                                        <span className={`text-[10px] font-black italic tracking-widest mt-1 break-words ${!isInactive ? 'text-emerald-500 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>{rankingData.getPersonalStatus(mDoc.name).currentTitle.name}</span>
-                                                                    </div>
-                                                                    <div className={`shrink-0 w-4 h-4 rounded-full ${st.raidToday >= 2 ? 'bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,1)]' : 'bg-slate-300 dark:bg-slate-700'}`}></div>
-                                                                </div>
-                                                                <div className="grid grid-cols-2 gap-3 mb-6 text-center">
-                                                                    <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-[1.5rem] border border-slate-100 dark:border-slate-700/50">
-                                                                        <div className="text-[9px] text-slate-400 dark:text-slate-500 uppercase mb-1 font-bold">오늘</div>
-                                                                        <div className={`text-xl font-black italic ${!isInactive ? 'text-slate-900 dark:text-white' : 'text-slate-400 dark:text-slate-500'}`}>{st.raidToday}</div>
-                                                                    </div>
-                                                                    <div className={`p-4 rounded-[1.5rem] border ${!isInactive ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-900/40' : 'bg-slate-50 dark:bg-slate-800/60 border-slate-100 dark:border-slate-700/50'}`}>
-                                                                        <div className={`text-[9px] uppercase mb-1 font-bold ${!isInactive ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>누적</div>
-                                                                        <div className={`text-xl font-black italic ${!isInactive ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>{rankingData.getPersonalStatus(mDoc.name).raidCount}</div>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </section>
-                                        </div>
-                                    )}
                                 </div>
                             )}
 
-                            {}
                             {mainCategory === 'ranking' && (
                                 <div className="animate-fadeIn space-y-10">
                                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
@@ -1296,20 +977,16 @@
                                             <div className="dashboard-card overflow-hidden">
                                                 <table className="w-full text-left">
                                                     <thead className="bg-slate-50 dark:bg-slate-800 text-slate-400 text-[10px] uppercase border-b dark:border-slate-700">
-                                                        <tr>
-                                                            <th className="px-5 py-4">순위</th>
-                                                            <th className="px-5 py-4">길드원</th>
-                                                            <th className="px-5 py-4 text-right">점수</th>
-                                                        </tr>
+                                                        <tr><th className="px-5 py-4">순위</th><th className="px-5 py-4">길드원</th><th className="px-5 py-4 text-right">점수</th></tr>
                                                     </thead>
                                                     <tbody className="divide-y dark:divide-slate-700 text-slate-900 dark:text-white">
                                                         {rankingData.weekly.slice(0, 10).map((r, i) => (
                                                             <tr key={r.name} className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 ${r.name === nickname ? 'bg-blue-50/50 dark:bg-blue-900/20' : ''}`}>
                                                                 <td className="px-5 py-5 italic text-xl font-black">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`}</td>
-                                                                <td className="px-5 py-5">
+                                                                <td className="px-5 py-5 break-words">
                                                                     <div className="flex flex-col">
-                                                                        <span className="font-bold break-words">{r.name}</span>
-                                                                        <span className="text-[9px] text-blue-500 dark:text-blue-400 italic break-words">{rankingData.getPersonalStatus(r.name).currentTitle.name}</span>
+                                                                        <span className="font-bold">{r.name}</span>
+                                                                        <span className="text-[9px] text-blue-500 dark:text-blue-400 italic truncate break-words">{rankingData.getPersonalStatus(r.name).currentTitle.name}</span>
                                                                     </div>
                                                                 </td>
                                                                 <td className="px-5 py-5 text-right text-blue-600 dark:text-blue-400 italic whitespace-nowrap">{r.score} P</td>
@@ -1320,29 +997,33 @@
                                             </div>
                                         </section>
                                         <section className="space-y-6">
-                                            <h3 className="font-black text-2xl italic uppercase text-emerald-600 px-2">시즌 명예의 전당</h3>
+                                            <h3 className="font-black text-2xl italic uppercase text-emerald-600 px-2">시즌 명예의 전당 (누적)</h3>
                                             <div className="dashboard-card overflow-hidden">
                                                 <table className="w-full text-left">
                                                     <thead className="bg-slate-50 dark:bg-slate-800 text-slate-400 text-[10px] uppercase border-b dark:border-slate-700">
-                                                        <tr>
-                                                            <th className="px-5 py-4">순위</th>
-                                                            <th className="px-5 py-4">길드원</th>
-                                                            <th className="px-5 py-4 text-right">점수</th>
-                                                        </tr>
+                                                        <tr><th className="px-5 py-4">순위</th><th className="px-5 py-4">길드원</th><th className="px-5 py-4 text-right">통계</th></tr>
                                                     </thead>
                                                     <tbody className="divide-y dark:divide-slate-700 text-slate-900 dark:text-white">
-                                                        {rankingData.season.slice(0, 10).map((r, i) => (
-                                                            <tr key={r.name} className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 ${r.name === nickname ? 'bg-emerald-50/50 dark:bg-emerald-900/20' : ''}`}>
-                                                                <td className="px-5 py-5 italic text-xl font-black">{i === 0 ? '👑' : i === 1 ? '💎' : i === 2 ? '⭐' : `#${i+1}`}</td>
-                                                                <td className="px-5 py-5">
-                                                                    <div className="flex flex-col">
-                                                                        <span className="font-bold break-words">{r.name}</span>
-                                                                        <span className="text-[9px] text-emerald-500 dark:text-emerald-400 italic break-words">{rankingData.getPersonalStatus(r.name).currentTitle.name}</span>
-                                                                    </div>
-                                                                </td>
-                                                                <td className="px-5 py-5 text-right text-emerald-600 dark:text-emerald-400 italic whitespace-nowrap">{r.score} P</td>
-                                                            </tr>
-                                                        ))}
+                                                        {rankingData.weekly.slice(0, 10).map((r, i) => {
+                                                            const st = stats.playerMap[r.name] || {};
+                                                            return (
+                                                                <tr key={r.name} className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 ${r.name === nickname ? 'bg-emerald-50/50 dark:bg-emerald-900/20' : ''}`}>
+                                                                    <td className="px-5 py-5 italic text-xl font-black">{i === 0 ? '👑' : i === 1 ? '💎' : i === 2 ? '⭐' : `#${i+1}`}</td>
+                                                                    <td className="px-5 py-5 break-words">
+                                                                        <div className="flex flex-col">
+                                                                            <span className="font-bold">{r.name}</span>
+                                                                            <span className="text-[9px] text-emerald-500 dark:text-emerald-400 italic break-words">{rankingData.getPersonalStatus(r.name).currentTitle.name}</span>
+                                                                        </div>
+                                                                    </td>
+                                                                    <td className="px-5 py-5 text-right whitespace-nowrap">
+                                                                        <div className="flex flex-col items-end">
+                                                                            <span className="text-xs font-bold text-slate-600 dark:text-slate-300">총 참여: {st.swords || 0}회</span>
+                                                                            <span className="text-[10px] text-slate-400">누적 점수: {r.score} P</span>
+                                                                        </div>
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
                                                     </tbody>
                                                 </table>
                                             </div>
@@ -1351,96 +1032,20 @@
                                 </div>
                             )}
 
-                            {}
                             {mainCategory === 'history' && (
                                 <div className="animate-fadeIn space-y-10 max-w-4xl mx-auto">
                                     <div className="flex flex-col gap-8">
                                         <div className="flex justify-between items-center px-2">
-                                            <h3 className="font-black text-2xl italic uppercase text-pink-500">작전 다이어리</h3>
-                                            <div className="text-[10px] text-slate-400 uppercase tracking-widest">Missed Ops Detailed Analytics</div>
+                                            <h3 className="font-black text-2xl italic uppercase text-pink-500">균격 작전 다이어리</h3>
+                                            <div className="text-[10px] text-slate-400 uppercase tracking-widest">Conquest Seasonal Analytics</div>
                                         </div>
                                         <section className="space-y-6">
                                             <div className="flex items-center gap-2 px-2">
-                                                <div className="w-1.5 h-6 bg-emerald-500 rounded-full"></div>
-                                                <h4 className="font-black text-lg italic uppercase text-emerald-600">일별 일격 상세 현황</h4>
-                                            </div>
-                                            <div className="flex gap-3 overflow-x-auto no-scrollbar pb-4 px-2">
-                                                {recentDates.map(date => {
-                                                    const d = new Date(date);
-                                                    const isToday = new Date().toISOString().split('T')[0] === date;
-                                                    return (
-                                                        <button key={date} onClick={() => setSelectedDiaryDate(date)} className={`shrink-0 w-24 py-5 rounded-[2rem] flex flex-col items-center gap-1 transition-all border-2 ${selectedDiaryDate === date ? 'bg-emerald-500 text-white border-emerald-500 shadow-xl scale-105' : 'bg-white dark:bg-slate-800 text-slate-400 border-slate-100 dark:border-slate-700'}`}>
-                                                            <span className="text-[10px] uppercase tracking-tighter">{['일','월','화','수','목','금','토'][d.getDay()]}요일</span>
-                                                            <span className="text-xl font-black italic leading-none">{d.getDate()}</span>
-                                                            {isToday && <span className="text-[8px] bg-white text-emerald-500 px-2 py-0.5 rounded-full mt-1.5 shadow-sm">TODAY</span>}
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-                                            <div className="dashboard-card p-8 border-l-[12px] border-emerald-500 shadow-lg bg-white dark:bg-slate-800">
-                                                <div className="flex justify-between items-center mb-8 border-b pb-4 dark:border-slate-700">
-                                                    <h5 className="font-black text-slate-400 uppercase tracking-widest text-xs"><i className="far fa-calendar-alt mr-2"></i> {selectedDiaryDate} STRIKE Report</h5>
-                                                </div>
-                                                <div className="agent-grid">
-                                                    {diaryHistory.getRaidReport(selectedDiaryDate).map(report => (
-                                                        <div key={report.name} className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all ${report.remaining > 0 ? 'border-red-100 dark:border-red-900/30 bg-red-50/30 dark:bg-red-950/20' : 'border-emerald-100 dark:border-emerald-900/30 bg-emerald-50/20 dark:bg-emerald-950/20'}`}>
-                                                            <div className="flex flex-col">
-                                                                <span className="font-bold text-slate-700 dark:text-slate-200">{report.name}</span>
-                                                                <span className={`text-[10px] ${report.remaining > 0 ? 'text-red-500 animate-pulse' : 'text-emerald-500 dark:text-emerald-400'}`}>{report.remaining > 0 ? `열쇠 ${report.remaining}개 미사용` : '열쇠 사용 완료'}</span>
-                                                            </div>
-                                                            <div className="text-right">
-                                                                <div className="text-xs text-slate-400 dark:text-slate-500 uppercase">Usage</div>
-                                                                <div className={`text-lg font-black italic ${report.remaining > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{report.used} / 2</div>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </section>
-                                        <hr className="border-slate-200 dark:border-slate-700 mx-2" />
-                                        <section className="space-y-6">
-                                            <div className="flex items-center gap-2 px-2">
                                                 <div className="w-1.5 h-6 bg-blue-500 rounded-full"></div>
-                                                <h4 className="font-black text-lg italic uppercase text-blue-600">균격 시즌 상세 현황 (최근 4주)</h4>
-                                            </div>
-                                            <div className="flex gap-3 overflow-x-auto no-scrollbar pb-4 px-2">
-                                                {diaryHistory.conquestSeasons.map((season, idx) => (
-                                                    <button key={idx} onClick={() => setSelectedConquestSeasonIndex(idx)} className={`shrink-0 px-6 py-5 rounded-[2rem] flex flex-col items-center gap-1 transition-all border-2 ${selectedConquestSeasonIndex === idx ? 'bg-blue-500 text-white border-blue-500 shadow-xl scale-105' : 'bg-white dark:bg-slate-800 text-slate-400 border-slate-100 dark:border-slate-700'}`}>
-                                                        <span className="text-[10px] uppercase tracking-tighter">{idx === 0 ? 'Current' : `${idx}주 전`}</span>
-                                                        <span className="text-sm font-black italic leading-none whitespace-nowrap">{season.label}</span>
-                                                    </button>
-                                                ))}
+                                                <h4 className="font-black text-lg italic uppercase text-blue-600 dark:text-blue-400">균격 시즌 상세 현황 (최근 4주)</h4>
                                             </div>
                                             <div className="dashboard-card p-8 border-l-[12px] border-blue-500 shadow-lg bg-white dark:bg-slate-800">
-                                                <div className="flex flex-col mb-8 border-b pb-4 dark:border-slate-700">
-                                                    <h5 className="font-black text-slate-400 uppercase tracking-widest text-xs mb-1"><i className="fas fa-shield-alt mr-2"></i> Conquest Detail Report</h5>
-                                                    <p className="text-[10px] font-bold text-blue-400 italic">{diaryHistory.conquestSeasons[selectedConquestSeasonIndex].range}</p>
-                                                </div>
-                                                <div className="agent-grid">
-                                                    {diaryHistory.conquestSeasons[selectedConquestSeasonIndex].reports.map(report => {
-                                                        const isCompleted = report.remainingSwords === 0;
-                                                        return (
-                                                            <div key={report.name} className={`p-5 rounded-[2rem] border-2 flex flex-col gap-4 transition-all ${!isCompleted ? 'border-blue-100 dark:border-blue-900/30 bg-blue-50/20 dark:bg-blue-950/20' : 'border-slate-100 dark:border-slate-800 bg-slate-50/10 dark:bg-slate-900/10'}`}>
-                                                                <div className="flex justify-between items-start">
-                                                                    <div className="flex flex-col">
-                                                                        <span className={`text-lg font-black italic leading-none mb-1 ${!isCompleted ? 'text-slate-800 dark:text-white' : 'text-slate-400 dark:text-slate-500'}`}>{report.name}</span>
-                                                                        <span className={`text-[10px] font-bold ${!isCompleted ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}>{!isCompleted ? `${report.remainingSwords}자루 남음` : '전부 사용됨'}</span>
-                                                                    </div>
-                                                                    <div className={`px-3 py-1 rounded-full text-[10px] font-black italic ${!isCompleted ? 'bg-slate-900 dark:bg-slate-800 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>{report.usedSwords} / 10</div>
-                                                                </div>
-                                                                <div className="flex items-end justify-between">
-                                                                    <div className="flex flex-col">
-                                                                        <span className="text-[9px] text-slate-400 dark:text-slate-500 uppercase tracking-widest">Left Time</span>
-                                                                        <span className={`text-base font-black font-mono leading-none ${!isCompleted ? 'text-blue-500 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}>{report.remainingMin}m {report.remainingSec}s</span>
-                                                                    </div>
-                                                                    <div className="w-16 h-1.5 bg-slate-100 dark:bg-black/30 rounded-full overflow-hidden">
-                                                                        <div className={`h-full ${!isCompleted ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-600'} transition-all duration-1000`} style={{ width: `${(report.usedSwords / 10) * 100}%` }}></div>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
+                                                <div className="text-slate-400 text-sm text-center">현재 시즌 통계는 개발 중입니다. (기존 레이드 데이터 정리 완료)</div>
                                             </div>
                                         </section>
                                     </div>
@@ -1448,9 +1053,9 @@
                             )}
                         </main>
 
-                        {}
+                        {/* 하단 플로팅 컨트롤 (모바일/데스크톱 공용) */}
                         <div className="fixed bottom-3 md:bottom-6 left-1/2 -translate-x-1/2 w-[95%] md:w-full md:max-w-6xl z-[150] animate-fadeIn font-bold">
-                            <div className="bg-slate-950/95 backdrop-blur-3xl text-white px-4 md:px-12 py-3.5 md:py-5 rounded-[2rem] md:rounded-[3.5rem] flex flex-col md:flex-row justify-between items-center shadow-2xl border border-white/10 gap-3 md:gap-0">
+                            <div className="bg-slate-900/95 dark:bg-black/80 backdrop-blur-3xl text-white px-4 md:px-12 py-3.5 md:py-5 rounded-[2rem] md:rounded-[3.5rem] flex flex-col md:flex-row justify-between items-center shadow-2xl border border-white/10 gap-3 md:gap-0">
                                 <div className="flex items-center gap-4 w-full md:w-auto min-w-0 border-b md:border-b-0 border-white/10 pb-2 md:pb-0">
                                     <div className="flex flex-col min-w-0">
                                         <span className="text-[8px] md:text-[9px] text-blue-400 uppercase tracking-[0.2em] mb-0.5">식별된 길드원</span>
@@ -1458,26 +1063,15 @@
                                             <span className="text-sm md:text-xl font-black italic tracking-tighter truncate text-white">{nickname}</span>
                                             <span className="text-[8px] md:text-[10px] text-blue-300 italic truncate">{myStatusObj.currentTitle.name}</span>
                                         </div>
-                                        {myStatusObj.nextTitle && (
-                                            <span className="text-[7px] md:text-[9px] text-slate-300">다음 단계까지 <span className="text-yellow-400 font-bold">{myStatusObj.nextTitle.score - myStatusObj.score}p 남음</span></span>
-                                        )}
                                     </div>
                                 </div>
                                 <div className="hidden lg:flex flex-col items-center justify-center flex-1 px-8 border-x border-white/10 mx-6 overflow-hidden">
-                                    <span className="text-[8px] text-slate-400 uppercase tracking-widest mb-1">실시간 처치 기록</span>
+                                    <span className="text-[8px] text-slate-400 uppercase tracking-widest mb-1">실시간 작전 피드</span>
                                     <div className="text-[10px] text-slate-200 italic truncate max-w-full text-center log-animate" key={latestLog ? latestLog.timestamp?.seconds : 'init'}>
                                         {latestLog ? (<>🚩 <span className="text-blue-400 font-black">[{latestLog.nickname}]</span> {latestLog.mob} 공략 성공</>) : ("새로운 작전 데이터를 기다리는 중...")}
                                     </div>
                                 </div>
                                 <div className="flex items-center justify-around md:justify-end gap-4 md:gap-10 w-full md:w-auto shrink-0">
-                                    <div className="flex flex-col text-center">
-                                        <span className="text-[8px] md:text-[9px] text-emerald-400 uppercase tracking-[0.1em] mb-0.5">나의 일격 성과</span>
-                                        <div className="flex items-center justify-center gap-1.5">
-                                            <span className="text-xs md:text-lg font-black italic">{myStatusObj.rank}위</span>
-                                            <span className="text-[8px] md:text-[10px] text-slate-400">({myStatusObj.raidCount}개)</span>
-                                        </div>
-                                    </div>
-                                    <div className="h-8 w-px bg-white/10"></div>
                                     <div className="flex flex-col text-center">
                                         <span className="text-[8px] md:text-[9px] text-slate-400 uppercase mb-0.5">시스템 상태</span>
                                         <div className="flex items-center gap-1.5 justify-center">
@@ -1489,6 +1083,45 @@
                                 </div>
                             </div>
                         </div>
+
+                        {/* 공지사항 모달 */}
+                        {showNoticeModal && (
+                            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn text-slate-900 dark:text-white" onClick={() => setShowNoticeModal(false)}>
+                                <div className="bg-white dark:bg-slate-900 rounded-[2rem] shadow-2xl p-8 max-w-md w-full border-t-8 border-blue-500" onClick={e=>e.stopPropagation()}>
+                                    <div className="flex justify-between items-center mb-6">
+                                        <h3 className="text-lg font-black flex items-center gap-2"><i className="fas fa-bullhorn text-blue-500"></i>전체 공지사항</h3>
+                                        <button onClick={() => setShowNoticeModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><i className="fas fa-times"></i></button>
+                                    </div>
+                                    <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{notice}</p>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 히스토리 모달 */}
+                        {showHistoryModal && (
+                            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn text-slate-900 dark:text-white" onClick={() => setShowHistoryModal(false)}>
+                                <div className="bg-white dark:bg-slate-900 rounded-[2rem] shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col border-t-8 border-blue-500" onClick={e=>e.stopPropagation()}>
+                                    <div className="p-6 border-b dark:border-slate-800 flex justify-between items-center shrink-0">
+                                        <h3 className="text-lg font-black"><i className="fas fa-history text-blue-500 mr-2"></i>모든 처치 기록</h3>
+                                        <button onClick={() => setShowHistoryModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><i className="fas fa-times"></i></button>
+                                    </div>
+                                    <div className="p-6 overflow-y-auto flex-1 space-y-3">
+                                        {logs.map((l, idx) => (
+                                            <div key={idx} className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs font-black text-blue-600 dark:text-blue-400">{l.nickname}</span>
+                                                    <span className="text-xs text-slate-700 dark:text-slate-300">{l.mob}</span>
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className="text-[10px] text-slate-400 font-mono">{l.timestamp?.seconds ? new Date(l.timestamp.seconds * 1000).toLocaleString() : ''}</div>
+                                                    <div className="text-[10px] text-slate-500">{l.playMin}분 {l.playSec}초</div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 );
             }
@@ -1496,50 +1129,9 @@
             return (
                 <React.Fragment>
                     {pageContent}
-
-                    {showFullNotice && (
-                        <div className="fixed inset-0 z-[1100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fadeIn font-bold">
-                            <div className="bg-white dark:bg-slate-800 dashboard-card p-6 md:p-8 w-full max-w-xl border-t-8 border-blue-600 shadow-2xl space-y-6 max-h-[80vh] flex flex-col">
-                                <div className="flex justify-between items-center border-b pb-4 dark:border-slate-700 shrink-0">
-                                    <h3 className="text-lg font-black dark:text-white flex items-center gap-2"><i className="fas fa-bullhorn text-blue-500"></i>전체 공지사항</h3>
-                                    <button onClick={() => setShowFullNotice(false)} className="w-8 h-8 flex items-center justify-center bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-full transition-colors"><i className="fas fa-times"></i></button>
-                                </div>
-                                <div className="overflow-y-auto pr-2 flex-1 min-h-[200px]">
-                                    <p className="text-sm text-slate-700 dark:text-slate-200 whitespace-pre-wrap leading-relaxed">{notice}</p>
-                                    {!notice && <p className="text-slate-400 text-center py-10">등록된 공지사항이 없습니다.</p>}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {showFullLogs && (
-                        <div className="fixed inset-0 z-[1100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fadeIn font-bold">
-                            <div className="bg-white dark:bg-slate-800 dashboard-card p-6 md:p-8 w-full max-w-xl border-t-8 border-emerald-500 shadow-2xl space-y-6 max-h-[80vh] flex flex-col">
-                                <div className="flex justify-between items-center border-b pb-4 dark:border-slate-700 shrink-0">
-                                    <h3 className="text-lg font-black dark:text-white flex items-center gap-2"><i className="fas fa-history text-emerald-500"></i>전체 처치 기록</h3>
-                                    <button onClick={() => setShowFullLogs(false)} className="w-8 h-8 flex items-center justify-center bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-full transition-colors"><i className="fas fa-times"></i></button>
-                                </div>
-                                <div className="overflow-y-auto pr-2 flex-1 space-y-2">
-                                    {logs.map(l => {
-                                        const dt = l.timestamp?.seconds ? new Date(l.timestamp.seconds * 1000) : new Date();
-                                        return (
-                                            <div key={l.id} className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800 text-xs flex justify-between items-center">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-blue-600 dark:text-blue-400 font-black">[{l.nickname}]</span>
-                                                    <span className="text-slate-700 dark:text-slate-300">{l.mob} 처치</span>
-                                                </div>
-                                                <span className="text-[10px] text-slate-400">{dt.toLocaleString()}</span>
-                                            </div>
-                                        );
-                                    })}
-                                    {logs.length === 0 && <p className="text-slate-400 text-center py-10">활동 기록 대기 중...</p>}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
+                    {/* 모달: 관리자 패스워드 등 공통 UI 모달 */}
                     {showAdminEntry && (
-                        <div className="fixed inset-0 z-[1200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fadeIn font-bold">
+                        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fadeIn font-bold">
                             <div className="bg-white dark:bg-slate-800 dashboard-card p-8 w-full max-w-[320px] border-t-8 border-blue-600 shadow-2xl">
                                 <div className="mb-6 text-center">
                                     <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-1">보안 인증</p>
@@ -1556,17 +1148,17 @@
                         </div>
                     )}
                     {uiAlert && (
-                        <div className="fixed inset-0 z-[1300] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn text-slate-900 font-bold">
+                        <div className="fixed inset-0 z-[1001] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn text-slate-900 font-bold">
                             <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl p-10 max-w-sm w-full text-center border-t-[8px] border-blue-500">
-                                <p className="text-lg mb-8 dark:text-white font-bold whitespace-pre-wrap leading-relaxed">{uiAlert.message}</p>
+                                <p className="text-lg mb-8 dark:text-white font-bold">{uiAlert.message}</p>
                                 <button onClick={closeAlert} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black shadow-lg">확인</button>
                             </div>
                         </div>
                     )}
                     {uiConfirm && (
-                        <div className="fixed inset-0 z-[1300] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn text-slate-900 font-bold">
+                        <div className="fixed inset-0 z-[1001] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn text-slate-900 font-bold">
                             <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl p-10 max-w-sm w-full text-center border-t-[8px] border-orange-500">
-                                <p className="text-lg mb-8 dark:text-white font-bold whitespace-pre-wrap leading-relaxed">{uiConfirm.message}</p>
+                                <p className="text-lg mb-8 dark:text-white font-bold">{uiConfirm.message}</p>
                                 <div className="grid grid-cols-2 gap-3">
                                     <button onClick={() => setUiConfirm(null)} className="py-4 bg-slate-100 dark:bg-slate-800 dark:text-white rounded-2xl font-bold">취소</button>
                                     <button onClick={() => { uiConfirm.onConfirm(); setUiConfirm(null); }} className="py-4 bg-orange-500 text-white rounded-2xl font-bold shadow-lg">확인</button>
