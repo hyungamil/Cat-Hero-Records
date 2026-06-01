@@ -14,7 +14,7 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
         
         :root {
-            --brand-primary: #2563eb;
+            --brand-primary: #2563EB;
         }
 
         body { 
@@ -28,13 +28,14 @@
             width: 100%;
         }
 
+        /* 다크모드 프리미엄 색상 지정 */
         .dark body { 
             background-color: #0B1220; 
             color: #F8FAFC;
         }
 
         .dashboard-card { 
-            border-radius: 1rem; 
+            border-radius: 1.25rem; 
             background: #FFFFFF;
             border: 1px solid #E2E8F0;
             box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
@@ -45,6 +46,7 @@
             background-color: #1E293B;
             border-color: #334155;
             color: #F8FAFC;
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.3), 0 4px 6px -4px rgb(0 0 0 / 0.3);
         }
 
         .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -79,6 +81,15 @@
         }
         .log-animate { animation: slideUpFade 0.5s ease-out forwards; }
         .animate-fadeIn { animation: slideUpFade 0.3s ease-out forwards; }
+
+        @keyframes slotSpin {
+            0% { transform: translateY(-20px); opacity: 0; }
+            50% { transform: translateY(0); opacity: 1; }
+            100% { transform: translateY(20px); opacity: 0; }
+        }
+        .slot-animation {
+            animation: slotSpin 0.15s infinite linear;
+        }
     </style>
 </head>
 <body class="font-bold">
@@ -87,7 +98,7 @@
     <script type="text/babel" data-type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp, deleteDoc, doc, setDoc, updateDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp, deleteDoc, doc, setDoc, updateDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyCOt_5hYk7Y9EDwo1Cd55et5-JT6k7LIcc",
@@ -124,7 +135,7 @@
             { id: 12, name: "길드의 신", score: 10000 },
         ];
 
-        const REWARDS_LIST = ['장비', '레시피', '픽업', '룬 소환서', '특수룬 소환서'];
+        const REWARDS_LIST = ['레시피', '픽업', '룬 소환서', '특수룬 소환서'];
 
         function App() {
             const [user, setUser] = useState(null);
@@ -134,30 +145,25 @@
             const [adminPass, setAdminPass] = useState("");
             const [showAdminEntry, setShowAdminEntry] = useState(false);
             
-            // 환경 설정 (다크모드 및 UI 스케일)
             const [isDarkMode, setIsDarkMode] = useState(localStorage.getItem('isDarkMode') === 'true');
             const [uiScale, setUiScale] = useState(localStorage.getItem('uiScale') || '100%');
-            const [mainCategory, setMainCategory] = useState('conquest'); // 'conquest', 'strike', 'ranking', 'history'
+            const [mainCategory, setMainCategory] = useState('conquest'); 
             const [conquestFilter, setConquestFilter] = useState('timeSort');
 
-            // 균격(다중) 상태
             const [conquestNormalCount, setConquestNormalCount] = useState(0);
             const [conquestBossCount, setConquestBossCount] = useState(0);
             const [playMin, setPlayMin] = useState(0);
             const [playSec, setPlaySec] = useState(0);
             
-            // 데이터 연동
             const [logs, setLogs] = useState([]);
             const [members, setMembers] = useState([]);
             const [notice, setNotice] = useState("시스템 가동 중입니다.");
             const [newNotice, setNewNotice] = useState("");
             const [newMemberName, setNewMemberName] = useState("");
             
-            // 내정보(격추) 상태
             const [myStat, setMyStat] = useState("");
             const [myMount, setMyMount] = useState("");
 
-            // 즐겨찾기 상태
             const [favorites, setFavorites] = useState(JSON.parse(localStorage.getItem('cat_hero_favorites')) || []);
 
             const [uiAlert, setUiAlert] = useState(null);
@@ -165,21 +171,39 @@
             const [showNoticeModal, setShowNoticeModal] = useState(false);
             const [showHistoryModal, setShowHistoryModal] = useState(false);
 
-            // 일격 상태
             const [strikeSubTab, setStrikeSubTab] = useState('calc'); 
             const [bossScoreStr, setBossScoreStr] = useState("");
             const [selectedCalcMembers, setSelectedCalcMembers] = useState([]); 
             const [calcMemberSearch, setCalcMemberSearch] = useState(''); 
             
-            // 분배 상태
             const [basketItems, setBasketItems] = useState([]);
+            const [customEquipments, setCustomEquipments] = useState([]);
+            const [equipType, setEquipType] = useState('모자');
+            const [equipQty, setEquipQty] = useState('');
+            
             const [distResult, setDistResult] = useState(null);
             const captureRef = useRef(null);
+            const ratioCaptureRef = useRef(null); 
+
+            // 분배 애니메이션 연출 상태
+            const [isDistAnimating, setIsDistAnimating] = useState(false);
+            const [tempDistList, setTempDistList] = useState([]);
+            const [slotDisplayNames, setSlotDisplayNames] = useState([]);
+            const [enableAnimation, setEnableAnimation] = useState(localStorage.getItem('cat_hero_enable_anim') !== 'false');
+
+            // 관리자 모드 전용 상태
+            const [adminSearch, setAdminSearch] = useState('');
+            const [adminSortType, setAdminSortType] = useState('score');
+
+            // 스탯 수정 모달용 상태 변수
+            const [statModalMember, setStatModalMember] = useState(null);
+            const [inputStat, setInputStat] = useState('');
+            const [inputMount, setInputMount] = useState('');
+            const [inputDirectGyeokchu, setInputDirectGyeokchu] = useState('');
 
             const showAlert = (msg, type = 'success') => setUiAlert({ message: msg, type });
             const closeAlert = () => setUiAlert(null);
 
-            // [핵심 해결 지점] 정의되지 않았던 함수 생성
             const handleResetSession = () => {
                 setUiConfirm({ 
                     message: "길드원 정보를 초기화하고 이름 선택 화면으로 돌아가시겠습니까?", 
@@ -221,6 +245,30 @@
                 showAlert("텍스트가 복사되었습니다.");
             };
 
+            const handleAdminUpdateField = async (id, field, value) => {
+                try {
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', id), { [field]: value });
+                    showAlert("저장되었습니다.");
+                } catch (e) {
+                    showAlert("저장에 실패했습니다.", "error");
+                }
+            };
+
+            const handleSaveMemberStats = async () => {
+                if (!statModalMember) return;
+                try {
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', statModalMember.id), {
+                        stat: inputStat === '' ? null : Number(inputStat),
+                        mount: inputMount === '' ? null : Number(inputMount),
+                        directGyeokchu: inputDirectGyeokchu === '' ? null : Number(inputDirectGyeokchu)
+                    });
+                    showAlert("저장되었습니다.");
+                    setStatModalMember(null);
+                } catch (e) {
+                    showAlert("저장에 실패했습니다.", "error");
+                }
+            };
+
             const handleCaptureImage = () => {
                 if(!captureRef.current) return;
                 setTimeout(() => {
@@ -239,6 +287,41 @@
                 }, 300); 
             };
 
+            const handleCaptureRatio = () => {
+                if(!ratioCaptureRef.current) return;
+                setTimeout(() => {
+                    html2canvas(ratioCaptureRef.current, {
+                        scale: window.devicePixelRatio || 2,
+                        useCORS: true,
+                        backgroundColor: isDarkMode ? '#0B1220' : '#F8FAFC',
+                        scrollY: -window.scrollY
+                    }).then(canvas => {
+                        const link = document.createElement('a');
+                        link.download = `비율결과_${new Date().getTime()}.png`;
+                        link.href = canvas.toDataURL('image/png');
+                        link.click();
+                        showAlert("비율 결과가 이미지로 저장되었습니다.");
+                    }).catch(e => showAlert("이미지 생성 오류", "error"));
+                }, 300); 
+            };
+
+            const handleResetDistribution = () => {
+                setUiConfirm({
+                    message: "현재 분배 결과를 초기화하시겠습니까?\n(선택된 보상 목록도 함께 초기화됩니다)",
+                    checkboxLabel: "참여 길드원 목록도 함께 초기화",
+                    onConfirm: (clearMembers) => {
+                        setDistResult(null);
+                        setBasketItems([]);
+                        setCustomEquipments([]);
+                        setIsDistAnimating(false);
+                        if (clearMembers) {
+                            setSelectedCalcMembers([]);
+                        }
+                        showAlert("분배 결과가 초기화되었습니다.");
+                    }
+                });
+            };
+
             useEffect(() => {
                 if (isDarkMode) document.documentElement.classList.add('dark');
                 else document.documentElement.classList.remove('dark');
@@ -250,6 +333,10 @@
                 document.documentElement.style.fontSize = sizeMap[uiScale] || '16px';
                 localStorage.setItem('uiScale', uiScale);
             }, [uiScale]);
+
+            useEffect(() => {
+                localStorage.setItem('cat_hero_enable_anim', enableAnimation);
+            }, [enableAnimation]);
 
             useEffect(() => {
                 const initAuth = async () => { try { await signInAnonymously(auth); } catch (e) { console.error(e); } };
@@ -264,7 +351,7 @@
                     if (snapshot.empty) {
                         INITIAL_MEMBERS.forEach(name => addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'members_v24'), { name, score: 0 }));
                     } else {
-                        const loaded = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => (b.score || 0) - (a.score || 0));
+                        const loaded = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                         setMembers(loaded);
                         const me = loaded.find(m => m.name === nickname);
                         if(me) {
@@ -285,32 +372,55 @@
                 return () => { unsubMembers(); unsubLogs(); unsubSettings(); };
             }, [user, nickname]);
 
-            const rankingData = useMemo(() => {
-                const sortedByScore = [...members].sort((a, b) => (b.score || 0) - (a.score || 0));
-                const getPersonalStatus = (name) => {
-                    const m = members.find(mem => mem.name === name) || { score: 0 };
-                    const currentScore = m.score || 0;
-                    const currentTitle = [...TITLES_LIST].reverse().find(t => currentScore >= t.score) || TITLES_LIST[0];
-                    const nextTitle = TITLES_LIST.find(t => t.score > currentScore);
-                    const rankIdx = sortedByScore.findIndex(mem => mem.name === name);
-                    return { currentTitle, nextTitle, score: currentScore, rank: rankIdx + 1 };
-                };
-                return { weekly: sortedByScore, getPersonalStatus };
-            }, [members]);
-
             const stats = useMemo(() => {
                 const playerMap = {};
-                members.forEach(m => playerMap[m.name] = { swords: 0, totalInputTimeSec: 0, bossTimeSec: 0, joinedLogs: [] });
+                members.forEach(m => playerMap[m.name] = { 
+                    swords: 0, totalInputTimeSec: 0, joinedLogs: [], latestTime: 0, 
+                    normalCount: 0, bossCount: 0, points: 0 
+                });
                 logs.forEach(l => { 
                     if (playerMap[l.nickname]) { 
                         playerMap[l.nickname].swords += 1; 
                         const duration = (Number(l.playMin || 0) * 60 + Number(l.playSec || 0));
                         playerMap[l.nickname].totalInputTimeSec += duration;
                         playerMap[l.nickname].joinedLogs.push(l);
+                        if(l.timestamp?.seconds && l.timestamp.seconds > playerMap[l.nickname].latestTime) {
+                            playerMap[l.nickname].latestTime = l.timestamp.seconds;
+                        }
+                        if (l.mob === '일반몹') {
+                            playerMap[l.nickname].normalCount += 1;
+                            playerMap[l.nickname].points += 5;
+                        } else if (l.mob === '보스') {
+                            playerMap[l.nickname].bossCount += 1;
+                            playerMap[l.nickname].points += 10;
+                        }
                     } 
                 });
                 return { playerMap };
             }, [logs, members]);
+
+            const rankingData = useMemo(() => {
+                const sortedByPoints = [...members].sort((a, b) => {
+                    const statA = stats.playerMap[a.name] || { points: 0, bossCount: 0, latestTime: 0 };
+                    const statB = stats.playerMap[b.name] || { points: 0, bossCount: 0, latestTime: 0 };
+                    if (statB.points !== statA.points) return statB.points - statA.points;
+                    if (statB.bossCount !== statA.bossCount) return statB.bossCount - statA.bossCount;
+                    if (statB.latestTime !== statA.latestTime) return statB.latestTime - statA.latestTime;
+                    return a.name.localeCompare(b.name);
+                });
+
+                const getPersonalStatus = (name) => {
+                    const m = members.find(mem => mem.name === name) || { score: 0 };
+                    const pStat = stats.playerMap[name] || { points: 0 };
+                    const currentPoints = pStat.points;
+                    const currentTitle = [...TITLES_LIST].reverse().find(t => currentPoints >= t.score) || TITLES_LIST[0];
+                    const nextTitle = TITLES_LIST.find(t => t.score > currentPoints);
+                    const rankIdx = sortedByPoints.findIndex(mem => mem.name === name);
+                    return { currentTitle, nextTitle, score: currentPoints, rank: rankIdx + 1, rankObj: m };
+                };
+                
+                return { weekly: sortedByPoints, getPersonalStatus };
+            }, [members, stats]);
 
             const sortedConquestMembers = useMemo(() => {
                 return members
@@ -326,6 +436,21 @@
                     });
             }, [members, conquestFilter, stats]);
 
+            const adminSortedMembers = useMemo(() => {
+                return [...members]
+                    .filter(m => !adminSearch || m.name.toLowerCase().includes(adminSearch.toLowerCase()))
+                    .sort((a, b) => {
+                        const statA = stats.playerMap[a.name] || { points: 0, latestTime: 0, swords: 0 };
+                        const statB = stats.playerMap[b.name] || { points: 0, latestTime: 0, swords: 0 };
+
+                        if (adminSortType === 'score') return statB.points - statA.points;
+                        if (adminSortType === 'gyeokchu') return getMemberGyeokchu(b) - getMemberGyeokchu(a);
+                        if (adminSortType === 'latest') return statB.latestTime - statA.latestTime;
+                        if (adminSortType === 'count') return statB.swords - statA.swords;
+                        return 0;
+                    });
+            }, [members, adminSearch, adminSortType, stats]);
+
             const handleSaveMyStat = async () => {
                 const member = members.find(m => m.name === nickname);
                 if (!member) return;
@@ -334,8 +459,8 @@
                         stat: myStat === '' ? null : Math.floor(Number(myStat)),
                         mount: myMount === '' ? null : Math.floor(Number(myMount))
                     });
-                    showAlert("격추 제원이 연동되었습니다.");
-                } catch(e) { showAlert("저장 실패", "error"); }
+                    showAlert("저장되었습니다.");
+                } catch(e) { showAlert("저장에 실패했습니다.", "error"); }
             };
 
             const handleSubmitConquest = async (e) => {
@@ -411,26 +536,38 @@
 
             const executeDistribution = (type) => {
                 if(selectedCalcMembers.length === 0) return showAlert("참여 길드원이 없습니다.", "error");
-                if(basketItems.length === 0) return showAlert("등록된 보상이 없습니다.", "error");
+                if(basketItems.length === 0 && customEquipments.length === 0) return showAlert("등록된 보상이 없습니다.", "error");
 
                 let resultArr = [];
                 const pNames = selectedCalcMembers.map(id => members.find(m => m.id === id)?.name).filter(Boolean);
 
                 if (type === 'random') {
-                    basketItems.forEach(item => {
-                        if (item.name === '장비') {
-                            for(let i=0; i<item.qty; i++){
-                                const winner = pNames[Math.floor(Math.random() * pNames.length)];
-                                resultArr.push({ itemStr: '장비', winner });
-                            }
-                        } else {
+                    const equipItem = basketItems.find(b => b.name === '장비');
+                    if (equipItem) {
+                        for(let i=0; i<equipItem.qty; i++){
                             const winner = pNames[Math.floor(Math.random() * pNames.length)];
-                            resultArr.push({ itemStr: `${item.name} (일괄)`, winner });
+                            resultArr.push({ itemStr: '장비', winner, isEquip: true, isRandom: true });
                         }
+                    }
+                    customEquipments.forEach(eq => {
+                        for(let i=0; i<eq.qty; i++){
+                            const winner = pNames[Math.floor(Math.random() * pNames.length)];
+                            resultArr.push({ itemStr: `장비(${eq.type})`, winner, isEquip: true, isRandom: true });
+                        }
+                    });
+
+                    basketItems.filter(b => b.name !== '장비').forEach(item => {
+                        const winner = pNames[Math.floor(Math.random() * pNames.length)];
+                        resultArr.push({ itemStr: `${item.name} (일괄)`, winner, isEquip: false, isRandom: true });
                     });
                 } else if (type === 'contrib') {
                     if(calcStrikeReport.individualReports.length === 0) return showAlert("격추 데이터가 없습니다.", "error");
-                    basketItems.forEach(item => {
+                    
+                    let allItems = [];
+                    basketItems.forEach(b => { allItems.push({ name: b.name, qty: b.qty, isEquip: b.name === '장비' }); });
+                    customEquipments.forEach(eq => { allItems.push({ name: `장비(${eq.type})`, qty: eq.qty, isEquip: true }); });
+
+                    allItems.forEach(item => {
                         let totalQty = item.qty;
                         let remain = totalQty;
                         let fractions = [];
@@ -446,21 +583,62 @@
                         for(let i=0; i<remain; i++){ fractions[i].base += 1; }
                         
                         fractions.forEach(f => {
-                            if(f.base > 0) resultArr.push({ itemStr: `${item.name} x${f.base}`, winner: f.name });
+                            if(f.base > 0) resultArr.push({ itemStr: `${item.name} x${f.base}`, winner: f.name, isEquip: item.isEquip, isRandom: false });
                         });
                     });
                 }
 
-                setDistResult({ type: type === 'random' ? '무작위 랜덤 분배' : '기여도 기반 분배', list: resultArr });
+                if (enableAnimation) {
+                    setDistResult(null);
+                    setTempDistList(resultArr);
+                    setIsDistAnimating(true);
+                    setSlotDisplayNames(resultArr.map(() => pNames[Math.floor(Math.random() * pNames.length)]));
+                } else {
+                    setDistResult({ type: type === 'random' ? '무작위 랜덤 분배' : '기여도 기반 분배', list: resultArr });
+                }
             };
+
+            useEffect(() => {
+                let interval;
+                let timeout;
+                if (isDistAnimating) {
+                    const pNames = selectedCalcMembers.map(id => members.find(m => m.id === id)?.name).filter(Boolean);
+                    if (pNames.length > 0) {
+                        interval = setInterval(() => {
+                            setSlotDisplayNames(tempDistList.map(() => pNames[Math.floor(Math.random() * pNames.length)]));
+                        }, 80);
+                    }
+                    timeout = setTimeout(() => {
+                        setIsDistAnimating(false);
+                        setDistResult({ type: tempDistList[0]?.isRandom ? '무작위 랜덤 분배' : '기여도 기반 분배', list: tempDistList });
+                    }, 2500); 
+                }
+                return () => { clearInterval(interval); clearTimeout(timeout); };
+            }, [isDistAnimating, tempDistList, selectedCalcMembers, members]);
+
+            const handleSkipAnimation = () => {
+                setIsDistAnimating(false);
+                setDistResult({ type: tempDistList[0]?.isRandom ? '무작위 랜덤 분배' : '기여도 기반 분배', list: tempDistList });
+            };
+
+            const groupedDistResult = useMemo(() => {
+                if (!distResult || !distResult.list) return {};
+                return distResult.list.reduce((acc, curr) => {
+                    if (!acc[curr.winner]) acc[curr.winner] = {};
+                    if (!acc[curr.winner][curr.itemStr]) {
+                        acc[curr.winner][curr.itemStr] = { ...curr, count: 0 };
+                    }
+                    acc[curr.winner][curr.itemStr].count += 1;
+                    return acc;
+                }, {});
+            }, [distResult]);
 
             let pageContent;
 
-            // [관리자 모드를 최우선으로 검사하여 무한 로딩/튕김 버그 완전 해결]
             if (isAdminMode) {
                 pageContent = (
-                    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 p-4 md:p-8 animate-fadeIn text-slate-900 dark:text-slate-100 font-bold">
-                        <div className="max-w-6xl mx-auto dashboard-card p-6 md:p-8 border-t-8 border-slate-800 shadow-2xl">
+                    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 p-4 md:p-8 animate-fadeIn text-slate-900 dark:text-slate-100 font-bold pb-40">
+                        <div className="max-w-7xl mx-auto dashboard-card p-6 md:p-8 border-t-8 border-slate-800 shadow-2xl">
                             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4 border-b pb-6 dark:border-slate-700">
                                 <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center text-slate-800 dark:text-slate-200 font-bold"><i className="fas fa-shield-alt"></i></div>
@@ -469,46 +647,100 @@
                                 <button onClick={() => setIsAdminMode(false)} className="px-6 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 rounded-xl font-black shadow-sm text-slate-900 dark:text-white uppercase text-xs">나가기</button>
                             </div>
                             
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                <div className="space-y-8">
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                                <div className="space-y-8 lg:col-span-1">
                                     <section>
-                                        <label className="text-[10px] text-slate-400 uppercase tracking-widest mb-3 block font-bold">전체 공지사항 (모든 화면 상단 노출)</label>
+                                        <label className="text-[10px] text-slate-400 uppercase tracking-widest mb-3 block font-bold">전체 공지사항 (상단 노출)</label>
                                         <div className="flex gap-2">
                                             <input type="text" className="flex-1 p-3 border-2 border-slate-100 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm outline-none focus:border-blue-500" value={newNotice} onChange={e => setNewNotice(e.target.value)} placeholder="모든 길드원에게 노출될 공지사항" />
-                                            <button onClick={async () => { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { notice: newNotice }); showAlert("반영됨"); }} className="px-5 bg-blue-600 text-white rounded-xl font-black shadow-lg">송출</button>
+                                            <button onClick={async () => { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { notice: newNotice }); showAlert("저장되었습니다."); }} className="px-5 bg-blue-600 text-white rounded-xl font-black shadow-lg hover:bg-blue-700 transition-colors">송출</button>
                                         </div>
                                     </section>
                                     
                                     <section>
                                         <label className="text-[10px] text-slate-400 uppercase tracking-widest mb-3 block font-bold">데이터 관리 도구</label>
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                            <button onClick={() => setUiConfirm({ message: "균격 기록을 삭제합니까?", onConfirm: async () => { const snap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24')); for (const d of snap.docs) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24', d.id)); showAlert("균격 초기화 완료"); } })} className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900 rounded-xl text-blue-600 dark:text-blue-400 text-xs font-black uppercase">기록(균격) 초기화</button>
-                                            <button onClick={() => setUiConfirm({ message: "랭킹 점수를 초기화합니까?", onConfirm: async () => { for (const m of members) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', m.id), { score: 0 }); showAlert("점수 초기화 완료"); } })} className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900 rounded-xl text-red-600 dark:text-red-400 text-xs font-black uppercase">랭킹(점수) 초기화</button>
+                                            <button onClick={() => setUiConfirm({ message: "균격 기록을 삭제합니까?", onConfirm: async () => { const snap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24')); for (const d of snap.docs) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24', d.id)); showAlert("기록이 초기화되었습니다."); } })} className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900 rounded-xl text-blue-600 dark:text-blue-400 text-xs font-black uppercase hover:bg-blue-100 transition-colors">기록(균격) 초기화</button>
+                                            <button onClick={() => setUiConfirm({ message: "랭킹 점수를 초기화합니까?", onConfirm: async () => { for (const m of members) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', m.id), { score: 0 }); showAlert("점수가 초기화되었습니다."); } })} className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900 rounded-xl text-red-600 dark:text-red-400 text-xs font-black uppercase hover:bg-red-100 transition-colors">랭킹(점수) 초기화</button>
+                                        </div>
+                                    </section>
+                                    
+                                    <section className="dashboard-card p-5 border-l-[4px] border-amber-500 bg-amber-50/20 dark:bg-amber-900/10">
+                                        <h3 className="text-xs font-black mb-3 text-amber-600 dark:text-amber-400">길드원 추가</h3>
+                                        <div className="flex gap-2">
+                                            <input type="text" className="flex-1 p-3 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-amber-500 bg-white dark:bg-slate-900 text-sm" value={newMemberName} onChange={e => setNewMemberName(e.target.value)} placeholder="신규 닉네임" />
+                                            <button onClick={async () => { if(!newMemberName) return; await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'members_v24'), { name: newMemberName, score: 0 }); setNewMemberName(""); showAlert("추가되었습니다."); }} className="px-5 bg-slate-800 dark:bg-slate-700 text-white rounded-xl font-bold hover:bg-slate-900 transition-colors">등록</button>
                                         </div>
                                     </section>
                                 </div>
                                 
-                                <section>
-                                    <label className="text-[10px] text-slate-400 uppercase tracking-widest mb-3 block font-bold">인원 및 스탯 직접 관리 ({members.length})</label>
-                                    <div className="flex gap-2 mb-4">
-                                        <input type="text" className="flex-1 p-3 border-2 border-slate-100 dark:border-slate-800 rounded-xl outline-none focus:border-blue-500 bg-white dark:bg-slate-900 text-sm" value={newMemberName} onChange={e => setNewMemberName(e.target.value)} placeholder="신규 길드원 이름" />
-                                        <button onClick={async () => { if(!newMemberName) return; await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'members_v24'), { name: newMemberName, score: 0 }); setNewMemberName(""); showAlert("추가됨"); }} className="px-5 bg-slate-800 dark:bg-slate-700 text-white rounded-xl font-bold">추가</button>
-                                    </div>
-                                    <div className="max-h-[400px] overflow-y-auto divide-y dark:divide-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-900 shadow-inner no-scrollbar">
-                                        {members.map(m => (
-                                            <div key={m.id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors flex flex-col gap-3">
-                                                <div className="flex justify-between items-center">
-                                                    <span className="font-black text-blue-600 dark:text-blue-400"><i className="fas fa-user-shield mr-2 text-slate-400"></i>{m.name}</span>
-                                                    <button onClick={() => setUiConfirm({ message: `${m.name} 님을 삭제합니까?`, onConfirm: async () => { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', m.id)); } })} className="text-red-500 text-xs"><i className="fas fa-trash"></i></button>
-                                                </div>
-                                                <div className="grid grid-cols-4 gap-2 text-[10px]">
-                                                    <div className="flex flex-col"><span className="text-slate-400 mb-1">스탯 정수</span><input type="number" className="w-full p-1.5 border rounded text-center dark:bg-slate-800" defaultValue={m.stat||''} onBlur={(e) => updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', m.id), { stat: e.target.value?Number(e.target.value):null })} /></div>
-                                                    <div className="flex flex-col"><span className="text-slate-400 mb-1">탈것 값</span><input type="number" className="w-full p-1.5 border rounded text-center dark:bg-slate-800" defaultValue={m.mount||''} onBlur={(e) => updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', m.id), { mount: e.target.value?Number(e.target.value):null })} /></div>
-                                                    <div className="flex flex-col"><span className="text-amber-500 mb-1">격추 직접입력</span><input type="number" className="w-full p-1.5 border border-amber-200 rounded text-center dark:bg-slate-800 text-amber-600" defaultValue={m.directGyeokchu||''} onBlur={(e) => updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', m.id), { directGyeokchu: e.target.value?Number(e.target.value):null })} /></div>
-                                                    <div className="flex flex-col"><span className="text-slate-400 mb-1">점수</span><input type="number" className="w-full p-1.5 border rounded text-center dark:bg-slate-800 font-bold text-blue-600" defaultValue={m.score||0} onBlur={(e) => updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', m.id), { score: Number(e.target.value) })} /></div>
-                                                </div>
+                                <section className="lg:col-span-2 flex flex-col h-full min-h-[500px]">
+                                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-4 gap-4">
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] text-slate-400 uppercase tracking-widest block font-bold">인원 상세 정보 및 관리 ({members.length}명)</label>
+                                            <p className="text-[10px] text-slate-500">격추 수치를 직접 입력하거나 스탯을 변경하면 자동으로 <strong className="text-blue-500">저장</strong>됩니다.</p>
+                                        </div>
+                                        <div className="flex gap-2 w-full sm:w-auto">
+                                            <select className="p-2 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:border-blue-500 bg-white dark:bg-slate-800 font-bold" value={adminSortType} onChange={e => setAdminSortType(e.target.value)}>
+                                                <option value="score">랭킹 점수순</option>
+                                                <option value="gyeokchu">누적 격추순</option>
+                                                <option value="latest">최근 참여순</option>
+                                                <option value="count">참여 횟수순</option>
+                                            </select>
+                                            <div className="relative flex-1">
+                                                <input type="text" value={adminSearch} onChange={e => setAdminSearch(e.target.value)} placeholder="🔍 닉네임 검색" className="w-full p-2 pl-8 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:border-blue-500 bg-white dark:bg-slate-800" />
+                                                <i className="fas fa-search absolute left-3 top-[10px] text-[10px] text-slate-400"></i>
                                             </div>
-                                        ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="flex-1 overflow-y-auto border-2 border-slate-100 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-900 shadow-inner no-scrollbar">
+                                        {adminSortedMembers.map(m => {
+                                            const mStat = stats.playerMap[m.name] || {};
+                                            const isFav = favorites.includes(m.name);
+                                            const gyeokchu = getMemberGyeokchu(m);
+                                            return (
+                                                <div key={m.id} className="p-4 md:p-5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b dark:border-slate-800 last:border-b-0 flex flex-col gap-4">
+                                                    <div className="flex justify-between items-start">
+                                                        <div className="flex items-center gap-3">
+                                                            <button onClick={(e) => toggleFavorite(e, m.name)} className="text-lg focus:outline-none">
+                                                                <i className={`fas fa-star ${isFav ? 'text-yellow-400' : 'text-slate-300 dark:text-slate-600'}`}></i>
+                                                            </button>
+                                                            <div>
+                                                                <span className="font-black text-blue-600 dark:text-blue-400 text-base">{m.name}</span>
+                                                                <div className="text-[10px] text-slate-500 flex items-center gap-3 mt-1 font-mono">
+                                                                    <span>참여: {mStat.swords || 0}회</span>
+                                                                    <span>최근: {mStat.latestTime ? new Date(mStat.latestTime * 1000).toLocaleDateString() : '없음'}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <button onClick={() => setUiConfirm({ message: `${m.name} 님을 길드에서 삭제합니까?`, onConfirm: async () => { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', m.id)); showAlert("삭제되었습니다."); } })} className="text-slate-400 hover:text-red-500 text-xs p-1 transition-colors"><i className="fas fa-trash"></i></button>
+                                                    </div>
+                                                    
+                                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 dark:bg-slate-950/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
+                                                        <div className="flex flex-col gap-1">
+                                                            <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">스탯 <span className="text-slate-300 font-normal">(수식용)</span></span>
+                                                            <input type="number" className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-center dark:bg-slate-800 outline-none focus:border-blue-500 text-xs font-mono" defaultValue={m.stat||''} onBlur={(e) => handleAdminUpdateField(m.id, 'stat', e.target.value ? Number(e.target.value) : null)} onFocus={e=>e.target.select()} placeholder="미입력" />
+                                                        </div>
+                                                        <div className="flex flex-col gap-1">
+                                                            <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">탈것 <span className="text-slate-300 font-normal">(수식용)</span></span>
+                                                            <input type="number" className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-center dark:bg-slate-800 outline-none focus:border-blue-500 text-xs font-mono" defaultValue={m.mount||''} onBlur={(e) => handleAdminUpdateField(m.id, 'mount', e.target.value ? Number(e.target.value) : null)} onFocus={e=>e.target.select()} placeholder="미입력" />
+                                                        </div>
+                                                        <div className="flex flex-col gap-1">
+                                                            <span className="text-[10px] text-amber-500 uppercase font-bold tracking-wider">직접 격추 <span className="text-amber-300 font-normal">(최우선)</span></span>
+                                                            <input type="number" className="w-full p-2 border border-amber-200 dark:border-amber-900/50 bg-amber-50/30 rounded-lg text-center dark:bg-slate-800 text-amber-600 dark:text-amber-400 outline-none focus:border-amber-500 text-xs font-mono font-bold" defaultValue={m.directGyeokchu||''} onBlur={(e) => handleAdminUpdateField(m.id, 'directGyeokchu', e.target.value ? Number(e.target.value) : null)} onFocus={e=>e.target.select()} placeholder={gyeokchu > 0 ? `(${gyeokchu})` : '미입력'} />
+                                                        </div>
+                                                        <div className="flex flex-col gap-1">
+                                                            <span className="text-[10px] text-blue-500 uppercase font-bold tracking-wider">누적 포인트 <span className="text-blue-300 font-normal">(로그 기반)</span></span>
+                                                            <div className="w-full p-2 border border-blue-200 dark:border-blue-900/50 bg-blue-50/30 rounded-lg text-center dark:bg-slate-800 text-blue-600 dark:text-blue-400 outline-none text-xs font-mono font-black flex items-center justify-center">
+                                                                {(mStat.points || 0).toLocaleString()} P
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                        {adminSortedMembers.length === 0 && <div className="text-center py-10 text-slate-400 text-sm">검색 결과가 없습니다.</div>}
                                     </div>
                                 </section>
                             </div>
@@ -517,9 +749,9 @@
                 );
             } else if (!isNameSet) {
                 pageContent = (
-                    <div className="min-h-screen flex flex-col p-4 bg-slate-200 dark:bg-slate-950 transition-colors">
+                    <div className="min-h-screen flex flex-col p-4 bg-slate-200 dark:bg-slate-950 transition-colors pb-40">
                         {notice && (
-                            <div className="w-full max-w-sm mx-auto mb-6 bg-blue-600 dark:bg-blue-800 text-white p-3 rounded-xl shadow-lg flex items-center justify-between cursor-pointer" onClick={() => setShowNoticeModal(true)}>
+                            <div className="w-full max-w-sm mx-auto mb-6 bg-blue-600 dark:bg-blue-800 text-white p-3 rounded-xl shadow-lg flex items-center justify-between cursor-pointer hover:bg-blue-700 transition-colors" onClick={() => setShowNoticeModal(true)}>
                                 <div className="flex items-center gap-3 truncate">
                                     <i className="fas fa-bullhorn animate-pulse"></i>
                                     <span className="text-xs font-black truncate">{notice}</span>
@@ -539,7 +771,7 @@
                                         ))}
                                     </select>
                                     <button onClick={() => { if(nickname) { localStorage.setItem('cat_hero_nickname', nickname); setIsNameSet(true); } }} className="w-full bg-blue-600 text-white font-black py-4 rounded-xl shadow-lg hover:bg-blue-700 active:scale-95 transition-all text-lg">대시보드 접속</button>
-                                    <button onClick={() => setShowAdminEntry(true)} className="w-full text-center text-[10px] text-slate-400 font-bold uppercase mt-6 hover:text-blue-500">Administrator Portal</button>
+                                    <button onClick={() => setShowAdminEntry(true)} className="w-full text-center text-[10px] text-slate-400 font-bold uppercase mt-6 hover:text-blue-500 transition-colors">Administrator Portal</button>
                                 </div>
                             </div>
                         </div>
@@ -560,19 +792,19 @@
                     });
 
                 pageContent = (
-                    <div className="app-container">
+                    <div className="app-container pb-40">
                         <header className="bg-white dark:bg-slate-900 p-4 border-b-2 border-slate-100 dark:border-slate-800 sticky top-0 z-30 shadow-sm">
                             <div className="flex justify-between items-center gap-4">
-                                <div className="flex items-center gap-2 md:gap-3">
-                                    <button onClick={handleResetSession} className="w-10 h-10 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-500 hover:text-red-500 transition-all shadow-sm flex items-center justify-center font-bold">
+                                <div className="flex items-center gap-2 md:gap-3 min-w-0">
+                                    <button onClick={handleResetSession} className="shrink-0 w-10 h-10 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-500 hover:text-red-500 transition-all shadow-sm flex items-center justify-center font-bold">
                                         <i className="fas fa-power-off"></i>
                                     </button>
-                                    <div className="space-y-1">
+                                    <div className="space-y-1 min-w-0">
                                         <div className="flex gap-1 md:gap-2 overflow-x-auto no-scrollbar pb-1">
-                                            <button onClick={() => setMainCategory('conquest')} className={`px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black whitespace-nowrap transition-all ${mainCategory === 'conquest' ? 'main-tab-active' : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>01. 균격</button>
-                                            <button onClick={() => setMainCategory('strike')} className={`px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black whitespace-nowrap transition-all ${mainCategory === 'strike' ? 'main-tab-active' : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>02. 일격</button>
-                                            <button onClick={() => setMainCategory('ranking')} className={`px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black whitespace-nowrap transition-all ${mainCategory === 'ranking' ? 'main-tab-active bg-yellow-500 border-yellow-600 text-white' : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>03. 랭킹</button>
-                                            <button onClick={() => setMainCategory('history')} className={`px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black whitespace-nowrap transition-all ${mainCategory === 'history' ? 'main-tab-active bg-pink-500 border-pink-600 text-white' : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>04. 기록</button>
+                                            <button onClick={() => setMainCategory('conquest')} className={`shrink-0 px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black transition-all ${mainCategory === 'conquest' ? 'main-tab-active' : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>01. 균격</button>
+                                            <button onClick={() => setMainCategory('strike')} className={`shrink-0 px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black transition-all ${mainCategory === 'strike' ? 'main-tab-active' : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>02. 일격</button>
+                                            <button onClick={() => setMainCategory('ranking')} className={`shrink-0 px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black transition-all ${mainCategory === 'ranking' ? 'main-tab-active bg-yellow-500 border-yellow-600 text-white shadow-yellow-500/30' : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>03. 랭킹</button>
+                                            <button onClick={() => setMainCategory('history')} className={`shrink-0 px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black transition-all ${mainCategory === 'history' ? 'main-tab-active bg-pink-500 border-pink-600 text-white shadow-pink-500/30' : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>04. 기록</button>
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shrink-0"></span>
@@ -580,39 +812,45 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <select className="hidden sm:block text-[10px] p-2 bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-lg outline-none font-bold text-slate-500" value={uiScale} onChange={e => setUiScale(e.target.value)}>
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <div className="hidden sm:flex items-center gap-2 mr-2">
+                                        <label className="text-[9px] text-slate-500 font-bold cursor-pointer flex items-center gap-1.5">
+                                            <input type="checkbox" className="w-3 h-3 accent-blue-500" checked={enableAnimation} onChange={e => setEnableAnimation(e.target.checked)} />
+                                            분배 효과
+                                        </label>
+                                    </div>
+                                    <select className="hidden md:block text-[10px] p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg outline-none font-bold text-slate-500 dark:text-slate-400" value={uiScale} onChange={e => setUiScale(e.target.value)}>
                                         {['작게', '기본', '크게', '매우 크게'].map(s => <option key={s} value={s}>{s}</option>)}
                                     </select>
-                                    <button onClick={() => setShowAdminEntry(true)} className="w-9 h-9 border dark:border-slate-700 rounded-xl flex items-center justify-center text-slate-400 hover:text-blue-500 transition-colors shadow-sm"><i className="fas fa-cog"></i></button>
-                                    <button onClick={() => setIsDarkMode(!isDarkMode)} className="w-9 h-9 border dark:border-slate-700 rounded-xl flex items-center justify-center text-slate-400 hover:text-yellow-500 shadow-sm"><i className={`fas ${isDarkMode ? 'fa-sun' : 'fa-moon'}`}></i></button>
+                                    <button onClick={() => setShowAdminEntry(true)} className="w-9 h-9 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-center text-slate-400 hover:text-blue-500 transition-colors shadow-sm"><i className="fas fa-cog"></i></button>
+                                    <button onClick={() => setIsDarkMode(!isDarkMode)} className="w-9 h-9 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-center text-slate-400 hover:text-yellow-500 transition-colors shadow-sm"><i className={`fas ${isDarkMode ? 'fa-sun' : 'fa-moon'}`}></i></button>
                                 </div>
                             </div>
                         </header>
 
                         {notice && (
-                            <div className="bg-blue-600 dark:bg-blue-800 text-white p-3 md:px-8 cursor-pointer flex justify-between items-center shadow-md mb-2" onClick={() => setShowNoticeModal(true)}>
-                                <div className="flex items-center gap-3 truncate max-w-full">
+                            <div className="bg-blue-600 dark:bg-blue-800 text-white p-3 md:px-8 cursor-pointer flex justify-between items-center shadow-md mb-4 hover:bg-blue-700 dark:hover:bg-blue-700 transition-colors" onClick={() => setShowNoticeModal(true)}>
+                                <div className="flex items-center gap-3 truncate min-w-0">
                                     <i className="fas fa-bullhorn text-yellow-300 animate-pulse shrink-0"></i>
                                     <span className="text-xs font-black truncate">{notice}</span>
                                 </div>
-                                <span className="text-[10px] ml-4 bg-white/20 px-2 py-0.5 rounded shrink-0 hover:bg-white/40">전체보기</span>
+                                <span className="text-[10px] ml-4 bg-white/20 px-2 py-0.5 rounded shrink-0 font-bold hover:bg-white/30 transition-colors">전체보기</span>
                             </div>
                         )}
 
-                        <main className="p-4 md:p-8 mb-32">
+                        <main className="p-4 md:p-8">
                             {mainCategory === 'conquest' && (
                                 <div className="desktop-layout">
                                     <aside className="space-y-6">
                                         <div className="dashboard-card p-5 space-y-4">
-                                            <div className="flex justify-between items-center border-b dark:border-slate-800 pb-3">
+                                            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
                                                 <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2"><i className="fas fa-broadcast-tower text-red-500 animate-pulse"></i> 실시간 처치 기록</h3>
-                                                <button onClick={() => setShowHistoryModal(true)} className="text-[10px] text-blue-500 font-bold hover:underline">전체 보기</button>
+                                                <button onClick={() => setShowHistoryModal(true)} className="text-[10px] text-blue-500 dark:text-blue-400 font-bold hover:underline">전체 보기</button>
                                             </div>
                                             <div className="space-y-2.5 max-h-[150px] overflow-y-auto no-scrollbar">
                                                 {logs.slice(0, 5).map((l, idx) => (
                                                     <div key={idx} className="text-[10px] leading-relaxed border-b border-slate-50 dark:border-slate-800/50 pb-1.5 animate-fadeIn">
-                                                        <span className="text-blue-500 dark:text-blue-400 font-black">[{l.nickname}]</span> {l.mob} 성공 <span className="text-slate-400 ml-1">({l.playMin}m {l.playSec}s)</span>
+                                                        <span className="text-blue-500 dark:text-blue-400 font-black">[{l.nickname}]</span> <span className="dark:text-slate-200">{l.mob} 성공</span> <span className="text-slate-400 ml-1">({l.playMin}m {l.playSec}s)</span>
                                                     </div>
                                                 ))}
                                                 {logs.length === 0 && <p className="text-[10px] text-slate-400 text-center py-4">활동 기록 대기 중...</p>}
@@ -620,43 +858,43 @@
                                         </div>
                                         
                                         <form onSubmit={handleSubmitConquest} className="dashboard-card p-6 md:p-8 space-y-6 text-slate-900 dark:text-white border-l-[8px] border-blue-500">
-                                            <h2 className="text-lg uppercase italic border-b pb-4 dark:border-slate-700 font-bold">균격 기록 다중 등록</h2>
+                                            <h2 className="text-lg uppercase italic border-b border-slate-100 pb-4 dark:border-slate-700 font-bold">균격 기록 다중 등록</h2>
                                             
                                             <div className="grid grid-cols-2 gap-4">
-                                                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border dark:border-slate-800 flex flex-col items-center gap-3">
-                                                    <span className="text-xs font-black text-slate-500">일반몹</span>
-                                                    <div className="flex items-center gap-3 bg-white dark:bg-slate-800 rounded-xl p-1 shadow-sm border dark:border-slate-700">
-                                                        <button type="button" onClick={() => setConquestNormalCount(p => Math.max(0, p-1))} className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-600 dark:text-slate-300 font-black">-</button>
+                                                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 flex flex-col items-center gap-3">
+                                                    <span className="text-xs font-black text-slate-500 dark:text-slate-400">일반몹</span>
+                                                    <div className="flex items-center gap-3 bg-white dark:bg-slate-800 rounded-xl p-1 shadow-sm border border-slate-100 dark:border-slate-700">
+                                                        <button type="button" onClick={() => setConquestNormalCount(p => Math.max(0, p-1))} className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 font-black transition-colors">-</button>
                                                         <span className="w-6 text-center font-mono font-black text-lg">{conquestNormalCount}</span>
-                                                        <button type="button" onClick={() => setConquestNormalCount(p => p+1)} className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 text-blue-600 dark:text-blue-400 font-black">+</button>
+                                                        <button type="button" onClick={() => setConquestNormalCount(p => p+1)} className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-800/50 text-blue-600 dark:text-blue-400 font-black transition-colors">+</button>
                                                     </div>
                                                 </div>
-                                                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border dark:border-slate-800 flex flex-col items-center gap-3">
+                                                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 flex flex-col items-center gap-3">
                                                     <span className="text-xs font-black text-red-500">보스</span>
-                                                    <div className="flex items-center gap-3 bg-white dark:bg-slate-800 rounded-xl p-1 shadow-sm border dark:border-slate-700">
-                                                        <button type="button" onClick={() => setConquestBossCount(p => Math.max(0, p-1))} className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-600 dark:text-slate-300 font-black">-</button>
+                                                    <div className="flex items-center gap-3 bg-white dark:bg-slate-800 rounded-xl p-1 shadow-sm border border-slate-100 dark:border-slate-700">
+                                                        <button type="button" onClick={() => setConquestBossCount(p => Math.max(0, p-1))} className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 font-black transition-colors">-</button>
                                                         <span className="w-6 text-center font-mono font-black text-lg">{conquestBossCount}</span>
-                                                        <button type="button" onClick={() => setConquestBossCount(p => p+1)} className="w-8 h-8 rounded-lg bg-red-100 dark:bg-red-900/30 hover:bg-red-200 text-red-600 dark:text-red-400 font-black">+</button>
+                                                        <button type="button" onClick={() => setConquestBossCount(p => p+1)} className="w-8 h-8 rounded-lg bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-800/50 text-red-600 dark:text-red-400 font-black transition-colors">+</button>
                                                     </div>
                                                 </div>
                                             </div>
 
-                                            <div className="bg-slate-900 rounded-[2rem] p-6 text-center border border-slate-800">
+                                            <div className="bg-slate-900 dark:bg-[#0B1220] rounded-[2rem] p-6 text-center border border-slate-800">
                                                 <span className="text-[10px] text-slate-400 block mb-2 font-bold">1회당 시간 (공통 반영)</span>
                                                 <div className="text-4xl md:text-5xl font-black text-white italic mb-6 font-mono">{String(playMin).padStart(2, '0')}<span className="text-blue-500 mx-1.5">:</span>{String(playSec).padStart(2, '0')}</div>
                                                 <div className="grid grid-cols-3 gap-2">
                                                     {[1, 10, 1].map((v, i) => (
-                                                        <button key={`plus${i}`} type="button" onClick={() => setPlayMin(p => i===0 ? p+v : p)} className="bg-white/10 p-2.5 rounded-lg text-[10px] font-black text-white">+{v}{i===0?'분':'초'}</button>
+                                                        <button key={`plus${i}`} type="button" onClick={() => setPlayMin(p => i===0 ? p+v : p)} className="bg-white/10 hover:bg-white/20 transition-colors p-2.5 rounded-lg text-[10px] font-black text-white">+{v}{i===0?'분':'초'}</button>
                                                     ))}
                                                     {[-1, -10, -1].map((v, i) => (
-                                                        <button key={`minus${i}`} type="button" onClick={() => setPlayMin(p => i===0 ? Math.max(0, p+v) : p)} className="bg-red-500/10 p-2.5 rounded-lg text-[10px] font-black text-red-400">{-v}{i===0?'분':'초'}</button>
+                                                        <button key={`minus${i}`} type="button" onClick={() => setPlayMin(p => i===0 ? Math.max(0, p+v) : p)} className="bg-red-500/10 hover:bg-red-500/20 transition-colors p-2.5 rounded-lg text-[10px] font-black text-red-400">{-v}{i===0?'분':'초'}</button>
                                                     ))}
                                                 </div>
                                             </div>
 
                                             <div className="flex flex-col gap-3">
                                                 <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-6 rounded-2xl font-black text-xl shadow-lg shadow-blue-500/20 transition-all active:scale-95 uppercase italic border-b-4 border-blue-800">총 {conquestNormalCount + conquestBossCount}건 제출 승인</button>
-                                                <button type="button" onClick={handleUndoLastConquest} className="w-full bg-slate-100 dark:bg-slate-800 hover:bg-red-50 text-red-500 border border-slate-200 dark:border-slate-700 py-3.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all">마지막 균격 기록 취소</button>
+                                                <button type="button" onClick={handleUndoLastConquest} className="w-full bg-slate-100 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-900/30 text-red-500 border border-slate-200 dark:border-slate-700 py-3.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all">마지막 균격 기록 취소</button>
                                             </div>
                                         </form>
                                     </aside>
@@ -665,9 +903,9 @@
                                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 px-2">
                                             <h3 className="font-black text-lg italic uppercase text-blue-500 shrink-0">길드원 기록 현황</h3>
                                             <div className="flex gap-1.5 bg-slate-200 dark:bg-slate-800 p-1 rounded-xl w-full md:w-auto overflow-x-auto no-scrollbar">
-                                                <button onClick={() => setConquestFilter('timeSort')} className={`whitespace-nowrap px-4 py-1.5 rounded-lg text-[10px] font-black transition-all ${conquestFilter === 'timeSort' ? 'bg-white dark:bg-slate-600 shadow-sm text-emerald-600' : 'text-slate-500 dark:text-slate-400'}`}>남은시간 순</button>
-                                                <button onClick={() => setConquestFilter('all')} className={`whitespace-nowrap px-4 py-1.5 rounded-lg text-[10px] font-black transition-all ${conquestFilter === 'all' ? 'bg-white dark:bg-slate-600 shadow-sm text-blue-600' : 'text-slate-500 dark:text-slate-400'}`}>전체</button>
-                                                <button onClick={() => setConquestFilter('inactive')} className={`whitespace-nowrap px-4 py-1.5 rounded-lg text-[10px] font-black transition-all ${conquestFilter === 'inactive' ? 'bg-white dark:bg-slate-600 shadow-sm text-red-600' : 'text-slate-500 dark:text-slate-400'}`}>미참여</button>
+                                                <button onClick={() => setConquestFilter('timeSort')} className={`whitespace-nowrap px-4 py-1.5 rounded-lg text-[10px] font-black transition-all ${conquestFilter === 'timeSort' ? 'bg-white dark:bg-slate-600 shadow-sm text-emerald-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700'}`}>남은시간 순</button>
+                                                <button onClick={() => setConquestFilter('all')} className={`whitespace-nowrap px-4 py-1.5 rounded-lg text-[10px] font-black transition-all ${conquestFilter === 'all' ? 'bg-white dark:bg-slate-600 shadow-sm text-blue-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700'}`}>전체</button>
+                                                <button onClick={() => setConquestFilter('inactive')} className={`whitespace-nowrap px-4 py-1.5 rounded-lg text-[10px] font-black transition-all ${conquestFilter === 'inactive' ? 'bg-white dark:bg-slate-600 shadow-sm text-red-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700'}`}>미참여</button>
                                             </div>
                                         </div>
                                         <div className="agent-grid">
@@ -679,8 +917,8 @@
                                                 const isInactive = usedSwordsCount === 0;
                                                 
                                                 return (
-                                                    <div key={mDoc.id} className={`dashboard-card p-5 md:p-6 border-l-[6px] ${!isInactive ? 'border-l-blue-500 shadow-md' : 'border-l-slate-300 dark:border-l-slate-700 bg-slate-50/50 dark:bg-slate-800/40'} hover:translate-y-[-4px] transition-all`}>
-                                                        <div className="flex flex-col mb-4 gap-1.5">
+                                                    <div key={mDoc.id} className={`dashboard-card p-5 md:p-6 border-l-[6px] ${!isInactive ? 'border-l-blue-500 shadow-md' : 'border-l-slate-300 dark:border-l-slate-700 bg-slate-50/50 dark:bg-slate-800/40'} hover:translate-y-[-4px] transition-transform`}>
+                                                        <div className="flex flex-col mb-4 gap-1.5 min-w-0">
                                                             <div className="flex justify-between items-start gap-2">
                                                                 <span className={`text-lg font-black break-words italic ${!isInactive ? 'text-slate-900 dark:text-slate-100' : 'text-slate-600 dark:text-slate-300'}`}>{mDoc.name}</span>
                                                                 <span className={`text-[8px] md:text-[9px] font-black px-2 py-0.5 rounded-full shadow-sm whitespace-nowrap shrink-0 ${isInactive ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500' : (TOTAL_RESOURCES - usedSwordsCount) <= 0 ? 'bg-red-50 dark:bg-red-950/30 text-red-500' : 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400'}`}>
@@ -712,14 +950,13 @@
 
                             {mainCategory === 'strike' && (
                                 <div className="space-y-6">
-                                    <div className="flex justify-center gap-4 mb-8 bg-slate-200 dark:bg-slate-800/80 p-1.5 rounded-2xl w-fit mx-auto shadow-sm">
-                                        <button onClick={() => setStrikeSubTab('calc')} className={`px-6 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${strikeSubTab === 'calc' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-md' : 'text-slate-500 dark:text-slate-400'}`}><i className="fas fa-calculator"></i>격전지 추가 점수(격추)</button>
-                                        <button onClick={() => setStrikeSubTab('dist')} className={`px-6 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${strikeSubTab === 'dist' ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-md' : 'text-slate-500 dark:text-slate-400'}`}><i className="fas fa-gift"></i>격전지 분배 시스템</button>
+                                    <div className="flex flex-wrap justify-center gap-4 mb-8 bg-slate-200 dark:bg-slate-800/80 p-1.5 rounded-2xl w-fit mx-auto shadow-sm">
+                                        <button onClick={() => setStrikeSubTab('calc')} className={`px-6 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${strikeSubTab === 'calc' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-md' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700'}`}><i className="fas fa-calculator"></i>격전지 추가 점수(격추)</button>
+                                        <button onClick={() => setStrikeSubTab('dist')} className={`px-6 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${strikeSubTab === 'dist' ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-md' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700'}`}><i className="fas fa-gift"></i>격전지 분배 시스템</button>
                                     </div>
 
                                     {strikeSubTab === 'calc' ? (
                                         <div className="space-y-8 animate-fadeIn">
-                                            {/* 본인 스탯 수정 패널 */}
                                             <div className="dashboard-card p-6 border-l-[6px] border-blue-500 bg-blue-50/30 dark:bg-blue-900/10">
                                                 <div className="flex items-center gap-2 mb-4">
                                                     <i className="fas fa-user-shield text-blue-500"></i>
@@ -727,31 +964,31 @@
                                                 </div>
                                                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 items-end">
                                                     <div className="space-y-1">
-                                                        <label className="text-[10px] text-slate-500 font-bold">스탯 값 입력</label>
-                                                        <input type="number" className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none font-mono text-xs focus:border-blue-500" value={myStat} onChange={e => setMyStat(e.target.value.replace(/[^0-9]/g, ''))} placeholder="정수" />
+                                                        <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold">스탯 값 입력 (소수점 제외)</label>
+                                                        <input type="number" className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none font-mono text-xs focus:border-blue-500 text-slate-900 dark:text-white" value={myStat} onChange={e => setMyStat(e.target.value.replace(/[^0-9]/g, ''))} onFocus={e=>e.target.select()} placeholder="정수 입력" />
                                                     </div>
                                                     <div className="space-y-1">
-                                                        <label className="text-[10px] text-slate-500 font-bold">탈것 값 입력</label>
-                                                        <input type="number" className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none font-mono text-xs focus:border-blue-500" value={myMount} onChange={e => setMyMount(e.target.value.replace(/[^0-9]/g, ''))} placeholder="정수" />
+                                                        <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold">탈것 값 입력</label>
+                                                        <input type="number" className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none font-mono text-xs focus:border-blue-500 text-slate-900 dark:text-white" value={myMount} onChange={e => setMyMount(e.target.value.replace(/[^0-9]/g, ''))} onFocus={e=>e.target.select()} placeholder="정수 입력" />
                                                     </div>
                                                     <div className="flex gap-2 h-[42px]">
-                                                        <div className="flex-1 bg-slate-900 text-white rounded-lg flex items-center justify-center text-xs font-mono font-bold shadow-inner">
+                                                        <div className="flex-1 bg-slate-900 dark:bg-[#0B1220] text-white rounded-lg flex items-center justify-center text-xs font-mono font-bold shadow-inner">
                                                             예상: {getMemberGyeokchu({stat: myStat, mount: myMount}).toLocaleString()}
                                                         </div>
-                                                        <button onClick={handleSaveMyStat} className="px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-black shadow-md shrink-0">저장</button>
+                                                        <button onClick={handleSaveMyStat} className="px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-black shadow-md shrink-0 transition-colors">저장</button>
                                                     </div>
                                                 </div>
                                             </div>
 
                                             <div className="dashboard-card p-6 md:p-8 space-y-8">
                                                 <div className="space-y-3">
-                                                    <label className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-widest block font-bold">1단계: 몬스터 체력(점수) 값 입력 <span className="text-blue-500 font-normal">(선택사항)</span></label>
+                                                    <label className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-widest block font-bold">1단계: 몬스터 체력(점수) 값 입력 <span className="text-blue-500 dark:text-blue-400 font-normal">(선택사항)</span></label>
                                                     <div className="flex flex-col sm:flex-row gap-3">
-                                                        <input type="number" className="flex-1 p-3.5 bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-blue-500 font-mono text-lg font-bold text-slate-900 dark:text-white" value={bossScoreStr} onChange={e => setBossScoreStr(e.target.value.replace(/[^0-9]/g, ''))} placeholder="체력 미입력 시 기여도(%)만 산출됩니다" />
+                                                        <input type="number" className="flex-1 p-3.5 bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-blue-500 font-mono text-lg font-bold text-slate-900 dark:text-white" value={bossScoreStr} onChange={e => setBossScoreStr(e.target.value.replace(/[^0-9]/g, ''))} onFocus={e=>e.target.select()} placeholder="체력 미입력 시 기여도(%)만 산출됩니다" />
                                                         <div className="flex gap-2">
-                                                            <button onClick={() => setBossScoreStr("300000")} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-[10px] font-black hover:bg-slate-200 dark:hover:bg-slate-700">+30만</button>
-                                                            <button onClick={() => setBossScoreStr("500000")} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-[10px] font-black hover:bg-slate-200 dark:hover:bg-slate-700">+50만</button>
-                                                            <button onClick={() => setBossScoreStr("")} className="px-4 py-2 bg-red-50 dark:bg-red-900/30 text-red-500 rounded-lg text-xs font-black hover:bg-red-100">비우기</button>
+                                                            <button onClick={() => setBossScoreStr("300000")} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-[10px] font-black hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">+30만</button>
+                                                            <button onClick={() => setBossScoreStr("500000")} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-[10px] font-black hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">+50만</button>
+                                                            <button onClick={() => setBossScoreStr("")} className="px-4 py-2 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg text-xs font-black hover:bg-red-100 dark:hover:bg-red-800/50 transition-colors">비우기</button>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -760,10 +997,10 @@
                                                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                                                         <div className="space-y-1">
                                                             <label className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-widest block font-bold">2단계: 참여 길드원 선택 ({selectedCalcMembers.length}명 지정됨)</label>
-                                                            <p className="text-[10px] text-slate-400">타 길드원의 격추는 연산에만 사용되며, 스탯은 본인만 수정 가능합니다.</p>
+                                                            <p className="text-[10px] text-slate-400 dark:text-slate-500">타 길드원의 격추는 연산에만 사용되며, 스텟은 본인만 수정 가능합니다.</p>
                                                         </div>
                                                         <div className="flex w-full sm:w-auto gap-2">
-                                                            <button onClick={() => setSelectedCalcMembers([])} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-[10px] font-black rounded-xl hover:bg-slate-200 shrink-0">전체 선택 해제</button>
+                                                            <button onClick={() => setSelectedCalcMembers([])} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-black rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 shrink-0 transition-colors">전체 선택 해제</button>
                                                             <div className="relative flex-1 sm:w-48">
                                                                 <input type="text" value={calcMemberSearch} onChange={e => setCalcMemberSearch(e.target.value)} placeholder="🔍 길드원 이름 검색" className="w-full p-2 pl-8 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:border-blue-500 text-slate-900 dark:text-white" />
                                                                 <i className="fas fa-search absolute left-3 top-3 text-[10px] text-slate-400"></i>
@@ -781,13 +1018,13 @@
                                                                     <div className="flex-1 text-left min-w-0">
                                                                         <div className="flex items-center gap-2">
                                                                             <div className={`w-3.5 h-3.5 rounded-md border flex items-center justify-center text-[8px] text-white shrink-0 ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950'}`}>{isSelected && '✓'}</div>
-                                                                            <span className={`text-xs font-black truncate break-words ${isSelected ? 'text-blue-600 dark:text-blue-400' : 'text-slate-800 dark:text-slate-200'}`}>{m.name}</span>
+                                                                            <span className={`text-xs font-black break-words ${isSelected ? 'text-blue-600 dark:text-blue-400' : 'text-slate-800 dark:text-slate-200'}`}>{m.name}</span>
                                                                         </div>
                                                                         <div className={`text-[10px] font-bold font-mono mt-1 pl-5 ${gyeokchu > 0 ? 'text-slate-500 dark:text-slate-400' : 'text-red-400'}`}>
                                                                             격추: {gyeokchu > 0 ? gyeokchu.toLocaleString() : '미등록'}
                                                                         </div>
                                                                     </div>
-                                                                    <button type="button" onClick={(e) => toggleFavorite(e, m.name)} className="shrink-0 p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700">
+                                                                    <button type="button" onClick={(e) => toggleFavorite(e, m.name)} className="shrink-0 p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
                                                                         <i className={`fas fa-star text-xs ${isFav ? 'text-yellow-400' : 'text-slate-300 dark:text-slate-600'}`}></i>
                                                                     </button>
                                                                 </div>
@@ -797,104 +1034,128 @@
                                                 </div>
 
                                                 <div className="space-y-4 pt-6 border-t border-slate-100 dark:border-slate-800">
-                                                    <div className="flex justify-between items-center">
+                                                    <div className="flex flex-wrap justify-between items-center gap-3">
                                                         <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2"><i className="fas fa-poll-h text-blue-500"></i>격전지 비율 최종 결과</h3>
-                                                        <button onClick={() => {
-                                                            let txt = `━━━━━━━━━━━━\n격전지 비율 최종 결과\n총 격추 : ${calcStrikeReport.totalGyeokchu.toLocaleString()}\n`;
-                                                            if (bossScoreStr) txt += `몬스터 체력 : ${Number(bossScoreStr).toLocaleString()}\n`;
-                                                            txt += `━━━━━━━━━━━━\n`;
-                                                            calcStrikeReport.individualReports.forEach(r => {
-                                                                txt += `${r.name}\n기여율 : ${r.rate}% (남은 ${(100 - r.rate).toFixed(2)}%)\n`;
-                                                                if (bossScoreStr) txt += `예상 점수 : ${r.expectedScore.toLocaleString()}\n`;
-                                                            });
-                                                            txt += `━━━━━━━━━━━━`;
-                                                            copyToClipboard(txt);
-                                                        }} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg text-[10px] font-black text-slate-600 dark:text-slate-300 transition-colors"><i className="far fa-copy mr-1"></i>텍스트 복사</button>
+                                                        <div className="flex gap-2">
+                                                            <button onClick={() => {
+                                                                let txt = `━━━━━━━━━━━━\n격전지 비율 최종 결과\n총 격추 : ${calcStrikeReport.totalGyeokchu.toLocaleString()}\n`;
+                                                                if (bossScoreStr) txt += `몬스터 체력 : ${Number(bossScoreStr).toLocaleString()}\n`;
+                                                                txt += `━━━━━━━━━━━━\n`;
+                                                                calcStrikeReport.individualReports.forEach(r => {
+                                                                    if (bossScoreStr) {
+                                                                        txt += `${r.name}\n기여율 : ${r.rate}% (남은 ${(100 - r.rate).toFixed(2)}%)\n예상 점수 : ${r.expectedScore.toLocaleString()}\n`;
+                                                                    } else {
+                                                                        txt += `${r.name} : ${r.rate}% (남은 ${(100 - r.rate).toFixed(2)}%)\n`;
+                                                                    }
+                                                                });
+                                                                txt += `━━━━━━━━━━━━`;
+                                                                copyToClipboard(txt);
+                                                            }} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg text-[10px] font-black text-slate-700 dark:text-slate-300 transition-colors shadow-sm"><i className="far fa-copy mr-1"></i>텍스트 복사</button>
+                                                            <button onClick={handleCaptureRatio} className="px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-800/50 rounded-lg text-[10px] font-black transition-colors shadow-sm"><i className="fas fa-camera mr-1"></i>결과 이미지 저장</button>
+                                                        </div>
                                                     </div>
                                                     
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                        <div className="p-5 rounded-2xl bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900 flex flex-col justify-between">
-                                                            <span className="text-[10px] text-blue-600 dark:text-blue-400 uppercase tracking-wider">총 격추 수치</span>
-                                                            <span className="text-2xl md:text-3xl font-black font-mono text-blue-700 dark:text-blue-400 mt-2">{calcStrikeReport.totalGyeokchu.toLocaleString()}</span>
+                                                    {/* 비율 결과 캡처용 영역 (1:1 비율 최적화 구조) */}
+                                                    <div id="ratio-result-card" ref={ratioCaptureRef} className="p-6 md:p-8 rounded-[2rem] bg-white dark:bg-slate-900 border-2 border-blue-500 shadow-2xl relative mt-4">
+                                                        <div className="text-center mb-6 border-b border-slate-100 dark:border-slate-800 pb-4">
+                                                            <h3 className="text-2xl font-black italic text-slate-900 dark:text-white">격전지 비율 최종 결과</h3>
                                                         </div>
-                                                        {bossScoreStr && (
-                                                            <div className="p-5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900 flex flex-col justify-between">
-                                                                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">예상 처치 시간</span>
-                                                                <span className="text-2xl md:text-3xl font-black font-mono text-emerald-700 dark:text-emerald-400 mt-2">
-                                                                    {calcStrikeReport.totalGyeokchu > 0 ? (
-                                                                        <>
-                                                                            {Math.floor(calcStrikeReport.expectedSeconds / 60) > 0 && `${Math.floor(calcStrikeReport.expectedSeconds / 60)}분 `}
-                                                                            {calcStrikeReport.expectedSeconds % 60}초
-                                                                        </>
-                                                                    ) : "계산 불가"}
-                                                                </span>
-                                                            </div>
-                                                        )}
-                                                    </div>
 
-                                                    <div className="overflow-x-auto border border-slate-100 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 shadow-sm mt-4">
-                                                        <table className="w-full text-left">
-                                                            <thead className="bg-slate-50 dark:bg-slate-800 text-slate-400 text-[10px] uppercase font-bold border-b dark:border-slate-800">
-                                                                <tr>
-                                                                    <th className="px-5 py-3 whitespace-nowrap">길드원 명</th>
-                                                                    <th className="px-5 py-3 text-center whitespace-nowrap">기여율 (%)</th>
-                                                                    <th className="px-5 py-3 text-right whitespace-nowrap">{bossScoreStr ? '예상 점수' : '개인 격추'}</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody className="divide-y dark:divide-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold">
-                                                                {calcStrikeReport.individualReports.map((report, idx) => (
-                                                                    <tr key={report.id} className={`hover:bg-slate-50/50 dark:hover:bg-slate-800/20 ${idx === 0 ? 'bg-amber-50/30 dark:bg-amber-950/10' : ''}`}>
-                                                                        <td className="px-5 py-4 flex items-center gap-2 break-words">
-                                                                            {idx === 0 && <span className="text-sm">👑</span>}
-                                                                            <span>{report.name}</span>
-                                                                        </td>
-                                                                        <td className="px-5 py-4 text-center whitespace-nowrap">
-                                                                            <div className="flex flex-col items-center gap-1">
-                                                                                <span className={`px-2 py-0.5 rounded-md text-[10px] ${idx === 0 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>{report.rate}%</span>
-                                                                                <span className="text-[8px] text-slate-400 font-normal">(남은 {(100-report.rate).toFixed(2)}%)</span>
-                                                                            </div>
-                                                                        </td>
-                                                                        <td className="px-5 py-4 text-right font-mono text-blue-600 dark:text-blue-400 italic">
-                                                                            {bossScoreStr ? `${report.expectedScore.toLocaleString()} P` : report.gyeokchu.toLocaleString()}
-                                                                        </td>
-                                                                    </tr>
-                                                                ))}
-                                                                {calcStrikeReport.individualReports.length === 0 && (
-                                                                    <tr><td colSpan="3" className="px-5 py-8 text-center text-slate-400">지정된 참여 길드원이 없습니다.</td></tr>
-                                                                )}
-                                                            </tbody>
-                                                        </table>
+                                                        <div className="flex justify-around items-center bg-blue-50 dark:bg-blue-950/20 rounded-2xl p-4 mb-6 border border-blue-100 dark:border-blue-900/50">
+                                                            <div className="text-center">
+                                                                <span className="text-[10px] text-blue-600 dark:text-blue-400 uppercase tracking-wider block font-bold">총 격추 수치</span>
+                                                                <span className="text-xl md:text-2xl font-black font-mono text-blue-700 dark:text-blue-400 mt-1 block">{calcStrikeReport.totalGyeokchu.toLocaleString()}</span>
+                                                            </div>
+                                                            {bossScoreStr && (
+                                                                <>
+                                                                    <div className="w-px h-10 bg-blue-200 dark:bg-blue-800/50"></div>
+                                                                    <div className="text-center">
+                                                                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block font-bold">몬스터 체력</span>
+                                                                        <span className="text-xl md:text-2xl font-black font-mono text-emerald-700 dark:text-emerald-400 mt-1 block">{Number(bossScoreStr).toLocaleString()}</span>
+                                                                    </div>
+                                                                </>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                                            {calcStrikeReport.individualReports.map((report, idx) => (
+                                                                <div key={report.id} className={`p-4 rounded-xl border ${idx === 0 ? 'border-amber-400 bg-amber-50/30 dark:bg-amber-950/20' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50'} flex flex-col`}>
+                                                                    <div className="flex items-center gap-2 mb-2 border-b border-slate-200 dark:border-slate-700/50 pb-2">
+                                                                        {idx === 0 && <span className="text-sm">👑</span>}
+                                                                        <span className="font-black text-slate-800 dark:text-slate-100 truncate">{report.name}</span>
+                                                                    </div>
+                                                                    <div className="flex justify-between items-end mb-1">
+                                                                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold">기여율</span>
+                                                                        <span className={`text-sm font-black font-mono ${idx === 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-700 dark:text-slate-200'}`}>{report.rate}%</span>
+                                                                    </div>
+                                                                    <div className="text-[9px] text-right text-slate-400 font-bold mb-3">(남은 {(100-report.rate).toFixed(2)}%)</div>
+                                                                    
+                                                                    <div className="mt-auto pt-2 border-t border-slate-200 dark:border-slate-700/50 flex justify-between items-center">
+                                                                        <span className="text-[10px] font-bold text-blue-500 dark:text-blue-400">{bossScoreStr ? '예상 점수' : '개인 격추'}</span>
+                                                                        <span className="text-sm font-black font-mono text-blue-600 dark:text-blue-400 italic">
+                                                                            {bossScoreStr ? report.expectedScore.toLocaleString() : report.gyeokchu.toLocaleString()}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                        {calcStrikeReport.individualReports.length === 0 && (
+                                                            <div className="py-12 text-center text-slate-400 dark:text-slate-500 font-bold bg-slate-50 dark:bg-slate-800/50 rounded-xl">참여시킬 길드원들을 위 리스트에서 지정해 주세요.</div>
+                                                        )}
+                                                        <div className="mt-6 text-center text-[10px] text-slate-400 dark:text-slate-500 font-mono tracking-widest">
+                                                            생성일시: {new Date().toLocaleString()}
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
                                     ) : (
                                         <div className="space-y-8 animate-fadeIn">
-                                            {/* 격전지 분배 시스템 */}
                                             <div className="dashboard-card p-6 md:p-8 space-y-8">
                                                 <div>
                                                     <h2 className="text-xl font-black italic text-emerald-600 dark:text-emerald-400 flex items-center gap-2"><i className="fas fa-gift"></i>격전지 분배 시스템</h2>
-                                                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">계산기에서 지정한 <strong>{selectedCalcMembers.length}명</strong>의 길드원 정보를 바탕으로 공정하게 분배합니다.</p>
+                                                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 mb-4">
+                                                        계산기에서 지정한 <strong className="text-emerald-500 dark:text-emerald-400">{selectedCalcMembers.length}명</strong>의 길드원 정보를 그대로 가져와 실제 드랍된 보상을 공정하게 분배합니다.
+                                                    </p>
+                                                    {selectedCalcMembers.length > 0 ? (
+                                                        <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+                                                            <div className="text-[10px] font-black text-slate-500 dark:text-slate-400 mb-2 border-b border-slate-200 dark:border-slate-700 pb-2">현재 선택된 길드원 (총 {selectedCalcMembers.length}명)</div>
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {selectedCalcMembers.map(id => {
+                                                                    const mName = members.find(m => m.id === id)?.name;
+                                                                    return mName ? (
+                                                                        <span key={id} className="text-[10px] bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 px-2 py-1 rounded-md flex items-center gap-1 shadow-sm">
+                                                                            <i className="fas fa-check"></i> {mName}
+                                                                        </span>
+                                                                    ) : null;
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-sm font-bold text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-900/10 p-4 rounded-xl border border-red-200 dark:border-red-800">
+                                                            현재 지정된 길드원이 없습니다. 먼저 "격전지 추가 점수(격추)" 탭에서 참여 길드원들을 선택해 주세요!
+                                                        </div>
+                                                    )}
                                                 </div>
 
-                                                <div className="space-y-4">
+                                                <div className="space-y-4 border-t border-slate-100 dark:border-slate-800 pt-6">
                                                     <label className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-widest block font-bold">1단계: 보상 종류 및 수량 선택</label>
                                                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                                                        {REWARDS_LIST.map(rName => {
+                                                        {['장비', ...REWARDS_LIST].map(rName => {
                                                             const existing = basketItems.find(b => b.name === rName);
                                                             const isChecked = !!existing;
                                                             return (
-                                                                <div key={rName} className={`p-3 rounded-xl border-2 transition-all flex flex-col gap-2 ${isChecked ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-900/20' : 'border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 hover:border-slate-300 dark:hover:border-slate-700'}`}>
+                                                                <div key={rName} className={`p-3 rounded-xl border-2 transition-all flex flex-col gap-2 ${isChecked ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20' : 'border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 hover:border-slate-300 dark:hover:border-slate-700'}`}>
                                                                     <label className="flex items-center gap-2 cursor-pointer">
                                                                         <input type="checkbox" className="w-4 h-4 accent-emerald-500 rounded" checked={isChecked} onChange={() => {
                                                                             if(isChecked) setBasketItems(p => p.filter(b => b.name !== rName));
                                                                             else setBasketItems(p => [...p, { name: rName, qty: 1 }]);
                                                                         }} />
-                                                                        <span className={`text-xs font-black ${isChecked ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}>{rName}</span>
+                                                                        <span className={`text-xs font-black ${isChecked ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-700 dark:text-slate-300'}`}>{rName}</span>
                                                                     </label>
                                                                     {isChecked && (
                                                                         <div className="mt-1">
-                                                                            <input type="number" min="1" className="w-full p-1.5 text-[10px] font-mono border dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-center outline-none focus:border-emerald-500" placeholder="수량 입력(생략가능)" value={existing.qty} onChange={e => {
+                                                                            <input type="number" min="1" className="w-full p-1.5 text-[10px] font-mono border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-center outline-none focus:border-emerald-500 text-slate-900 dark:text-white" placeholder="값 입력(생략가능)" value={existing.qty} onFocus={e=>e.target.select()} onChange={e => {
                                                                                 const val = Math.max(1, Number(e.target.value) || 1);
                                                                                 setBasketItems(p => p.map(b => b.name === rName ? { ...b, qty: val } : b));
                                                                             }} />
@@ -904,60 +1165,147 @@
                                                             );
                                                         })}
                                                     </div>
+                                                    
+                                                    <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center gap-3">
+                                                        <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 shrink-0">장비 상세 지정 (선택사항)</span>
+                                                        <div className="flex gap-2 w-full sm:w-auto">
+                                                            <select className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:border-emerald-500 font-bold" value={equipType} onChange={e => setEquipType(e.target.value)}>
+                                                                <option value="모자">모자</option><option value="신발">신발</option><option value="장갑">장갑</option><option value="목도리">목도리</option>
+                                                            </select>
+                                                            <input type="number" min="1" className="w-20 p-2 text-xs font-mono border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-center outline-none focus:border-emerald-500 text-slate-900 dark:text-white" placeholder="값 입력" value={equipQty} onFocus={e=>e.target.select()} onChange={e => setEquipQty(e.target.value)} />
+                                                            <button onClick={() => {
+                                                                const val = Math.max(1, Number(equipQty) || 1);
+                                                                setCustomEquipments(p => [...p, { type: equipType, qty: val }]);
+                                                                setEquipQty('');
+                                                            }} className="px-3 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-[10px] font-black hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors shrink-0">+ 장비 추가</button>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    {customEquipments.length > 0 && (
+                                                        <div className="flex flex-wrap gap-2 mt-2">
+                                                            {customEquipments.map((eq, idx) => (
+                                                                <span key={idx} className="text-[10px] font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1 rounded-lg text-slate-700 dark:text-slate-300 flex items-center gap-1.5 shadow-sm">
+                                                                    장비({eq.type}) x{eq.qty}
+                                                                    <button onClick={() => setCustomEquipments(p => p.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 ml-1"><i className="fas fa-times"></i></button>
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    )}
                                                 </div>
 
-                                                <div className="space-y-4 pt-6 border-t border-slate-100 dark:border-slate-800">
-                                                    <label className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-widest block font-bold">2단계: 보상 분배 모드 선택</label>
+                                                <div className="space-y-4 pt-6 border-t border-slate-100 dark:border-slate-800 relative">
+                                                    <div className="flex justify-between items-center mb-2">
+                                                        <label className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-widest font-bold">2단계: 보상 분배 모드 선택</label>
+                                                        <label className="text-[10px] text-slate-500 font-bold cursor-pointer flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-md">
+                                                            <input type="checkbox" className="w-3 h-3 accent-blue-500" checked={enableAnimation} onChange={e => setEnableAnimation(e.target.checked)} />
+                                                            애니메이션 효과 사용
+                                                        </label>
+                                                    </div>
+                                                    
                                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                                        <button onClick={() => executeDistribution('random')} className="p-6 rounded-2xl border-2 border-slate-200 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500 bg-white dark:bg-slate-900 transition-all flex flex-col items-center gap-3 group">
-                                                            <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-900/30 flex items-center justify-center text-slate-400 group-hover:text-emerald-500 transition-colors text-xl"><i className="fas fa-dice"></i></div>
-                                                            <div className="text-center">
-                                                                <h4 className="text-sm font-black text-slate-800 dark:text-slate-200">무작위 랜덤 분배</h4>
-                                                                <p className="text-[10px] text-slate-400 mt-1">확률에 따라 균등하게 랜덤 배분</p>
+                                                        <button onClick={() => executeDistribution('random')} disabled={isDistAnimating} 
+                                                                className="relative p-6 rounded-2xl bg-gradient-to-br from-orange-400 to-yellow-400 hover:from-orange-500 hover:to-yellow-500 text-white transition-all transform active:scale-95 shadow-lg flex flex-col items-start gap-2 overflow-hidden text-left disabled:opacity-50 disabled:cursor-not-allowed group">
+                                                            <i className="fas fa-dice text-4xl mb-1 drop-shadow-md group-hover:rotate-12 transition-transform"></i>
+                                                            <div>
+                                                                <h4 className="text-lg font-black drop-shadow-sm">무작위 랜덤 분배</h4>
+                                                                <p className="text-xs text-white/90 mt-1 font-bold">참여자 인원에게 동등한 랜덤 확률로 굴리기</p>
                                                             </div>
                                                         </button>
-                                                        <button onClick={() => executeDistribution('contrib')} className="p-6 rounded-2xl border-2 border-slate-200 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500 bg-white dark:bg-slate-900 transition-all flex flex-col items-center gap-3 group">
-                                                            <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-900/30 flex items-center justify-center text-slate-400 group-hover:text-emerald-500 transition-colors text-xl"><i className="fas fa-chart-pie"></i></div>
-                                                            <div className="text-center">
-                                                                <h4 className="text-sm font-black text-slate-800 dark:text-slate-200">기여도 기반 분배</h4>
-                                                                <p className="text-[10px] text-slate-400 mt-1">격추 비율(%)에 맞춰 수량 배분</p>
+                                                        <button onClick={() => executeDistribution('contrib')} disabled={isDistAnimating} 
+                                                                className="relative p-6 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white transition-all transform active:scale-95 shadow-lg flex flex-col items-start gap-2 overflow-hidden text-left disabled:opacity-50 disabled:cursor-not-allowed group">
+                                                            <i className="fas fa-chart-pie text-4xl mb-1 drop-shadow-md group-hover:scale-110 transition-transform"></i>
+                                                            <div>
+                                                                <h4 className="text-lg font-black drop-shadow-sm">기여도(%) 비례 분배</h4>
+                                                                <p className="text-xs text-white/90 mt-1 font-bold">스탯 기준 %에 맞추어 우선순위 지급</p>
                                                             </div>
                                                         </button>
                                                     </div>
                                                 </div>
 
-                                                {distResult && (
-                                                    <div className="mt-8 animate-fadeIn">
-                                                        <div className="flex justify-between items-end mb-3">
+                                                {isDistAnimating && (
+                                                    <div className="mt-8 pt-8 border-t border-slate-100 dark:border-slate-800">
+                                                        <div className="flex justify-between items-center mb-4">
+                                                            <div className="text-emerald-500 text-sm font-black italic flex items-center gap-2">
+                                                                <i className="fas fa-spinner fa-spin"></i> 주사위 굴리는 중...
+                                                            </div>
+                                                            <button onClick={handleSkipAnimation} className="px-3 py-1.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-black hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors shadow-sm">
+                                                                효과 스킵 <i className="fas fa-forward ml-1"></i>
+                                                            </button>
+                                                        </div>
+                                                        <div className="p-6 rounded-[2rem] bg-slate-100 dark:bg-slate-800 border-2 border-dashed border-emerald-300 dark:border-emerald-700">
+                                                            <div className="flex flex-col gap-3">
+                                                                {tempDistList.map((r, idx) => (
+                                                                    <div key={idx} className="flex items-center justify-between p-4 bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+                                                                        <div className="flex items-center gap-3">
+                                                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm shadow-inner ${r.isEquip ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400' : 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400'}`}>
+                                                                                <i className={`fas ${r.isEquip ? 'fa-khanda' : 'fa-gift'}`}></i>
+                                                                            </div>
+                                                                            <span className={`font-black ${r.isEquip ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{r.itemStr}</span>
+                                                                        </div>
+                                                                        <div className="text-xl font-black italic text-slate-800 dark:text-slate-100 min-w-[100px] text-right slot-animation">
+                                                                            {slotDisplayNames[idx]}
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {distResult && !isDistAnimating && (
+                                                    <div className="mt-8 animate-fadeIn border-t border-slate-100 dark:border-slate-800 pt-8">
+                                                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-3 gap-3">
                                                             <span className="text-[10px] text-emerald-600 dark:text-emerald-400 uppercase tracking-widest font-black">출력 결과물</span>
-                                                            <div className="flex gap-2">
+                                                            <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                                                                 <button onClick={() => {
                                                                     let txt = `━━━━━━━━━━━━\n분배 결과 (${distResult.type})\n━━━━━━━━━━━━\n`;
                                                                     distResult.list.forEach(r => txt += `${r.itemStr} - ${r.winner}\n`);
                                                                     txt += `━━━━━━━━━━━━`;
                                                                     copyToClipboard(txt);
-                                                                }} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg text-[10px] font-black text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition-colors"><i className="far fa-copy mr-1"></i>텍스트 복사</button>
-                                                                <button onClick={handleCaptureImage} className="px-3 py-1.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-lg text-[10px] font-black hover:bg-emerald-200 transition-colors"><i className="fas fa-camera mr-1"></i>이미지 저장</button>
+                                                                }} className="flex-1 sm:flex-none px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-[10px] font-black hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors shadow-sm whitespace-nowrap"><i className="far fa-copy mr-1"></i>결과 복사</button>
+                                                                <button onClick={handleCaptureImage} className="flex-1 sm:flex-none px-3 py-2 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-lg text-[10px] font-black hover:bg-emerald-200 dark:hover:bg-emerald-800/50 transition-colors shadow-sm whitespace-nowrap"><i className="fas fa-camera mr-1"></i>결과 이미지 생성</button>
+                                                                <button onClick={handleResetDistribution} className="w-full sm:w-auto px-3 py-2 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-lg text-[10px] font-black hover:bg-red-200 dark:hover:bg-red-800/50 transition-colors shadow-sm whitespace-nowrap"><i className="fas fa-trash-alt mr-1"></i>결과 초기화</button>
                                                             </div>
                                                         </div>
-                                                        <div id="dist-result-card" ref={captureRef} className="p-6 md:p-8 rounded-[2rem] bg-white dark:bg-slate-900 border-2 border-emerald-500 shadow-2xl relative overflow-hidden">
+                                                        
+                                                        <div id="dist-result-card" ref={captureRef} className="p-6 md:p-8 rounded-[2rem] bg-slate-50 dark:bg-slate-900 border-2 border-emerald-500 shadow-2xl relative overflow-hidden mt-4">
                                                             <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-emerald-400 to-teal-500"></div>
-                                                            <div className="border-b dark:border-slate-800 pb-4 mb-6">
-                                                                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 uppercase tracking-widest font-black block mb-1">최종 분배 결과</span>
-                                                                <h3 className="text-xl font-black italic text-slate-900 dark:text-white">{distResult.type}</h3>
+                                                            <div className="flex justify-between items-center mb-6 border-b border-slate-200 dark:border-slate-700 pb-4">
+                                                                <div>
+                                                                    <h3 className="text-xl md:text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">✅ 최종 분배 결과</h3>
+                                                                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold block mt-1">({distResult.type})</span>
+                                                                </div>
+                                                                <span className="px-3 py-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400 rounded-full text-xs font-black shrink-0 shadow-sm border border-emerald-200 dark:border-emerald-800">
+                                                                    참여 {Object.keys(groupedDistResult).length}명
+                                                                </span>
                                                             </div>
 
-                                                            <div className="flex flex-col gap-2">
-                                                                {distResult.list.map((r, idx) => (
-                                                                    <div key={idx} className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700">
-                                                                        <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 text-sm"><i className="fas fa-gift"></i></div>
-                                                                        <div className="flex-1 text-sm font-black text-slate-800 dark:text-slate-100 break-words">
-                                                                            <span className="text-emerald-600 dark:text-emerald-400">{r.itemStr}</span> - {r.winner}
-                                                                        </div>
+                                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                                {Object.entries(groupedDistResult).map(([winner, items]) => (
+                                                                    <div key={winner} className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm hover:shadow-md transition-shadow">
+                                                                        <h4 className="font-black text-lg text-blue-600 dark:text-blue-400 border-b border-slate-100 dark:border-slate-700 pb-2 mb-3 truncate">
+                                                                            {winner}
+                                                                        </h4>
+                                                                        <ul className="space-y-3">
+                                                                            {Object.values(items).map((item, idx) => (
+                                                                                <li key={idx} className="flex justify-between items-center text-xs">
+                                                                                    <span className="text-slate-700 dark:text-slate-300 font-bold flex-1 truncate pr-2">
+                                                                                        {item.isEquip && <i className="fas fa-khanda text-amber-500 mr-1.5"></i>}
+                                                                                        {!item.isEquip && <i className="fas fa-gift text-emerald-500 mr-1.5"></i>}
+                                                                                        {item.itemStr}
+                                                                                    </span>
+                                                                                    <div className="flex items-center text-purple-600 dark:text-purple-400 font-black font-mono shrink-0 text-sm">
+                                                                                        <span className="w-6 md:w-10 border-t border-dashed border-slate-300 dark:border-slate-600 mr-2 opacity-50"></span>
+                                                                                        x{item.count}
+                                                                                    </div>
+                                                                                </li>
+                                                                            ))}
+                                                                        </ul>
                                                                     </div>
                                                                 ))}
                                                             </div>
-                                                            <div className="mt-6 text-right text-[9px] text-slate-400 font-mono">
+
+                                                            <div className="mt-8 text-center text-[10px] text-slate-400 dark:text-slate-500 font-mono tracking-widest">
                                                                 생성일시: {new Date().toLocaleString()}
                                                             </div>
                                                         </div>
@@ -970,116 +1318,141 @@
                             )}
 
                             {mainCategory === 'ranking' && (
-                                <div className="animate-fadeIn space-y-10">
-                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                                        <section className="space-y-6">
-                                            <h3 className="font-black text-2xl italic uppercase text-blue-600 px-2">주간 기여 랭킹</h3>
-                                            <div className="dashboard-card overflow-hidden">
-                                                <table className="w-full text-left">
-                                                    <thead className="bg-slate-50 dark:bg-slate-800 text-slate-400 text-[10px] uppercase border-b dark:border-slate-700">
-                                                        <tr><th className="px-5 py-4">순위</th><th className="px-5 py-4">길드원</th><th className="px-5 py-4 text-right">점수</th></tr>
-                                                    </thead>
-                                                    <tbody className="divide-y dark:divide-slate-700 text-slate-900 dark:text-white">
-                                                        {rankingData.weekly.slice(0, 10).map((r, i) => (
-                                                            <tr key={r.name} className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 ${r.name === nickname ? 'bg-blue-50/50 dark:bg-blue-900/20' : ''}`}>
-                                                                <td className="px-5 py-5 italic text-xl font-black">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`}</td>
-                                                                <td className="px-5 py-5 break-words">
-                                                                    <div className="flex flex-col">
-                                                                        <span className="font-bold">{r.name}</span>
-                                                                        <span className="text-[9px] text-blue-500 dark:text-blue-400 italic truncate break-words">{rankingData.getPersonalStatus(r.name).currentTitle.name}</span>
+                                <div className="max-w-4xl mx-auto dashboard-card p-6 md:p-8 animate-fadeIn border-t-8 border-yellow-500">
+                                    <div className="flex items-center gap-3 mb-8 border-b border-slate-100 dark:border-slate-800 pb-4">
+                                        <div className="w-10 h-10 rounded-full bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 flex items-center justify-center text-xl shadow-inner"><i className="fas fa-trophy"></i></div>
+                                        <div>
+                                            <h2 className="text-xl font-black italic text-slate-900 dark:text-white">길드 명예의 전당</h2>
+                                            <p className="text-[10px] text-slate-500 dark:text-slate-400">누적 활동 포인트(P) 기반 시즌 통계 및 순위입니다.</p>
+                                        </div>
+                                    </div>
+                                    <div className="max-h-[600px] overflow-y-auto no-scrollbar border border-slate-100 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 shadow-sm">
+                                        <table className="w-full text-left border-collapse">
+                                            <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-[10px] uppercase font-bold border-b border-slate-200 dark:border-slate-700 sticky top-0 z-10">
+                                                <tr>
+                                                    <th className="px-3 py-3 text-center whitespace-nowrap">순위</th>
+                                                    <th className="px-3 py-3 whitespace-nowrap">닉네임</th>
+                                                    <th className="px-3 py-3 whitespace-nowrap text-right">포인트</th>
+                                                    <th className="px-3 py-3 whitespace-nowrap text-center hidden sm:table-cell">일반</th>
+                                                    <th className="px-3 py-3 whitespace-nowrap text-center hidden sm:table-cell">보스</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold">
+                                                {rankingData.weekly.map((m, i) => {
+                                                    const pStat = stats.playerMap[m.name] || { points: 0, normalCount: 0, bossCount: 0, latestTime: 0 };
+                                                    const status = rankingData.getPersonalStatus(m.name);
+                                                    return (
+                                                        <tr key={m.id} className={`hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors ${i === 0 ? 'bg-yellow-50/30 dark:bg-yellow-950/10' : ''}`}>
+                                                            <td className={`px-3 py-3 text-center font-black ${i === 0 ? 'text-yellow-500 text-base' : i === 1 ? 'text-slate-400' : i === 2 ? 'text-amber-600' : 'text-slate-500'}`}>
+                                                                {i < 3 ? <i className="fas fa-medal"></i> : `${i + 1}`}
+                                                            </td>
+                                                            <td className="px-3 py-3">
+                                                                <div className="flex flex-col gap-0.5">
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <span className="font-black text-blue-600 dark:text-blue-400 text-sm">{m.name}</span>
+                                                                        {i === 0 && <span className="text-[8px] bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400 px-1.5 py-0.5 rounded italic font-black hidden sm:inline-block">MVP</span>}
                                                                     </div>
-                                                                </td>
-                                                                <td className="px-5 py-5 text-right text-blue-600 dark:text-blue-400 italic whitespace-nowrap">{r.score} P</td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </section>
-                                        <section className="space-y-6">
-                                            <h3 className="font-black text-2xl italic uppercase text-emerald-600 px-2">시즌 명예의 전당 (누적)</h3>
-                                            <div className="dashboard-card overflow-hidden">
-                                                <table className="w-full text-left">
-                                                    <thead className="bg-slate-50 dark:bg-slate-800 text-slate-400 text-[10px] uppercase border-b dark:border-slate-700">
-                                                        <tr><th className="px-5 py-4">순위</th><th className="px-5 py-4">길드원</th><th className="px-5 py-4 text-right">통계</th></tr>
-                                                    </thead>
-                                                    <tbody className="divide-y dark:divide-slate-700 text-slate-900 dark:text-white">
-                                                        {rankingData.weekly.slice(0, 10).map((r, i) => {
-                                                            const st = stats.playerMap[r.name] || {};
-                                                            return (
-                                                                <tr key={r.name} className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 ${r.name === nickname ? 'bg-emerald-50/50 dark:bg-emerald-900/20' : ''}`}>
-                                                                    <td className="px-5 py-5 italic text-xl font-black">{i === 0 ? '👑' : i === 1 ? '💎' : i === 2 ? '⭐' : `#${i+1}`}</td>
-                                                                    <td className="px-5 py-5 break-words">
-                                                                        <div className="flex flex-col">
-                                                                            <span className="font-bold">{r.name}</span>
-                                                                            <span className="text-[9px] text-emerald-500 dark:text-emerald-400 italic break-words">{rankingData.getPersonalStatus(r.name).currentTitle.name}</span>
-                                                                        </div>
-                                                                    </td>
-                                                                    <td className="px-5 py-5 text-right whitespace-nowrap">
-                                                                        <div className="flex flex-col items-end">
-                                                                            <span className="text-xs font-bold text-slate-600 dark:text-slate-300">총 참여: {st.swords || 0}회</span>
-                                                                            <span className="text-[10px] text-slate-400">누적 점수: {r.score} P</span>
-                                                                        </div>
-                                                                    </td>
-                                                                </tr>
-                                                            );
-                                                        })}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </section>
+                                                                    <span className="text-[10px] text-slate-500 dark:text-slate-400 block sm:hidden font-mono mt-0.5">
+                                                                        일반: {pStat.normalCount} | <span className="text-red-400">보스: {pStat.bossCount}</span>
+                                                                    </span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-3 py-3 text-right font-mono font-black text-blue-600 dark:text-blue-400 text-sm">
+                                                                {pStat.points.toLocaleString()} P
+                                                            </td>
+                                                            <td className="px-3 py-3 text-center hidden sm:table-cell text-slate-600 dark:text-slate-400 font-mono">
+                                                                {pStat.normalCount}회
+                                                            </td>
+                                                            <td className="px-3 py-3 text-center hidden sm:table-cell text-red-500 font-mono">
+                                                                {pStat.bossCount}회
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                                {rankingData.weekly.length === 0 && (
+                                                    <tr>
+                                                        <td colSpan="5" className="text-center py-10 text-slate-400 font-bold">랭킹 데이터가 없습니다.</td>
+                                                    </tr>
+                                                )}
+                                            </tbody>
+                                        </table>
                                     </div>
                                 </div>
                             )}
 
                             {mainCategory === 'history' && (
-                                <div className="animate-fadeIn space-y-10 max-w-4xl mx-auto">
-                                    <div className="flex flex-col gap-8">
-                                        <div className="flex justify-between items-center px-2">
-                                            <h3 className="font-black text-2xl italic uppercase text-pink-500">균격 작전 다이어리</h3>
-                                            <div className="text-[10px] text-slate-400 uppercase tracking-widest">Conquest Seasonal Analytics</div>
+                                <div className="max-w-4xl mx-auto dashboard-card p-6 md:p-8 animate-fadeIn border-t-8 border-pink-500">
+                                    <div className="flex items-center gap-3 mb-8 border-b border-slate-100 dark:border-slate-800 pb-4">
+                                        <div className="w-10 h-10 rounded-full bg-pink-100 text-pink-600 dark:bg-pink-900/30 flex items-center justify-center text-xl shadow-inner"><i className="fas fa-history"></i></div>
+                                        <div>
+                                            <h2 className="text-xl font-black italic text-slate-900 dark:text-white">모든 처치 기록 현황</h2>
+                                            <p className="text-[10px] text-slate-500 dark:text-slate-400">시스템에 등록된 전체 작전 로그입니다.</p>
                                         </div>
-                                        <section className="space-y-6">
-                                            <div className="flex items-center gap-2 px-2">
-                                                <div className="w-1.5 h-6 bg-blue-500 rounded-full"></div>
-                                                <h4 className="font-black text-lg italic uppercase text-blue-600 dark:text-blue-400">균격 시즌 상세 현황 (최근 4주)</h4>
+                                    </div>
+                                    <div className="space-y-3 max-h-[600px] overflow-y-auto no-scrollbar pr-2">
+                                        {logs.map((l, idx) => (
+                                            <div key={idx} className="p-4 md:p-5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                                                <div className="flex items-center gap-4">
+                                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm shadow-inner shrink-0 ${l.mob === '보스' ? 'bg-red-100 text-red-600 dark:bg-red-900/30' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/30'}`}>
+                                                        <i className={`fas ${l.mob === '보스' ? 'fa-skull' : 'fa-crosshairs'}`}></i>
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-sm md:text-base font-black text-slate-900 dark:text-white">{l.nickname} <span className="text-[10px] font-normal text-slate-500 ml-1">대원</span></div>
+                                                        <div className="text-[11px] text-slate-500 dark:text-slate-400 font-bold mt-0.5"><span className={l.mob === '보스' ? 'text-red-500' : 'text-blue-500'}>{l.mob}</span> 공략 성공 ({l.playMin}분 {l.playSec}초)</div>
+                                                    </div>
+                                                </div>
+                                                <div className="text-left sm:text-right text-[10px] text-slate-400 dark:text-slate-500 font-mono ml-14 sm:ml-0 bg-white dark:bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 w-fit sm:w-auto">
+                                                    {l.timestamp?.seconds ? new Date(l.timestamp.seconds * 1000).toLocaleString() : '방금 전'}
+                                                </div>
                                             </div>
-                                            <div className="dashboard-card p-8 border-l-[12px] border-blue-500 shadow-lg bg-white dark:bg-slate-800">
-                                                <div className="text-slate-400 text-sm text-center">현재 시즌 통계는 개발 중입니다. (기존 레이드 데이터 정리 완료)</div>
-                                            </div>
-                                        </section>
+                                        ))}
+                                        {logs.length === 0 && <div className="text-center py-12 text-slate-400 font-bold">기록된 데이터가 없습니다.</div>}
                                     </div>
                                 </div>
                             )}
+
                         </main>
 
-                        {/* 하단 플로팅 컨트롤 (모바일/데스크톱 공용) */}
-                        <div className="fixed bottom-3 md:bottom-6 left-1/2 -translate-x-1/2 w-[95%] md:w-full md:max-w-6xl z-[150] animate-fadeIn font-bold">
-                            <div className="bg-slate-900/95 dark:bg-black/80 backdrop-blur-3xl text-white px-4 md:px-12 py-3.5 md:py-5 rounded-[2rem] md:rounded-[3.5rem] flex flex-col md:flex-row justify-between items-center shadow-2xl border border-white/10 gap-3 md:gap-0">
-                                <div className="flex items-center gap-4 w-full md:w-auto min-w-0 border-b md:border-b-0 border-white/10 pb-2 md:pb-0">
-                                    <div className="flex flex-col min-w-0">
-                                        <span className="text-[8px] md:text-[9px] text-blue-400 uppercase tracking-[0.2em] mb-0.5">식별된 길드원</span>
-                                        <div className="flex items-baseline gap-2">
-                                            <span className="text-sm md:text-xl font-black italic tracking-tighter truncate text-white">{nickname}</span>
-                                            <span className="text-[8px] md:text-[10px] text-blue-300 italic truncate">{myStatusObj.currentTitle.name}</span>
+                        {/* 하단 플로팅 컨트롤 */}
+                        <div className="fixed inset-x-0 bottom-3 md:bottom-6 z-[150] flex justify-center pointer-events-none">
+                            <div className="w-[95%] md:w-full md:max-w-6xl animate-fadeIn font-bold pointer-events-auto">
+                                <div className="bg-slate-950/95 dark:bg-[#0B1220]/95 backdrop-blur-3xl text-white px-4 md:px-12 py-3.5 md:py-5 rounded-[2rem] md:rounded-[3.5rem] flex flex-col md:flex-row justify-between items-center shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] border border-white/10 gap-3 md:gap-0">
+                                    <div className="flex items-center gap-4 w-full md:w-auto min-w-0 border-b md:border-b-0 border-white/10 pb-2 md:pb-0">
+                                        <div className="flex flex-col min-w-0">
+                                            <span className="text-[8px] md:text-[9px] text-blue-400 uppercase tracking-[0.2em] mb-0.5">식별된 길드원</span>
+                                            <div className="flex items-baseline gap-2">
+                                                <span className="text-sm md:text-xl font-black italic tracking-tighter truncate text-white">{nickname}</span>
+                                                <span className="text-[8px] md:text-[10px] text-blue-300 italic truncate">{myStatusObj.currentTitle.name}</span>
+                                            </div>
+                                            {myStatusObj.nextTitle && (
+                                                <span className="text-[7px] md:text-[9px] text-slate-300">다음 단계까지 <span className="text-yellow-400 font-bold">{myStatusObj.nextTitle.score - myStatusObj.score}p 남음</span></span>
+                                            )}
                                         </div>
                                     </div>
-                                </div>
-                                <div className="hidden lg:flex flex-col items-center justify-center flex-1 px-8 border-x border-white/10 mx-6 overflow-hidden">
-                                    <span className="text-[8px] text-slate-400 uppercase tracking-widest mb-1">실시간 작전 피드</span>
-                                    <div className="text-[10px] text-slate-200 italic truncate max-w-full text-center log-animate" key={latestLog ? latestLog.timestamp?.seconds : 'init'}>
-                                        {latestLog ? (<>🚩 <span className="text-blue-400 font-black">[{latestLog.nickname}]</span> {latestLog.mob} 공략 성공</>) : ("새로운 작전 데이터를 기다리는 중...")}
-                                    </div>
-                                </div>
-                                <div className="flex items-center justify-around md:justify-end gap-4 md:gap-10 w-full md:w-auto shrink-0">
-                                    <div className="flex flex-col text-center">
-                                        <span className="text-[8px] md:text-[9px] text-slate-400 uppercase mb-0.5">시스템 상태</span>
-                                        <div className="flex items-center gap-1.5 justify-center">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                            <span className="text-[9px] md:text-xs uppercase tracking-tighter text-emerald-400">정상</span>
+                                    <div className="hidden lg:flex flex-col items-center justify-center flex-1 px-8 border-x border-white/10 mx-6 overflow-hidden">
+                                        <span className="text-[8px] text-slate-400 uppercase tracking-widest mb-1">실시간 작전 피드</span>
+                                        <div className="text-[10px] text-slate-200 italic truncate max-w-full text-center log-animate" key={latestLog ? latestLog.timestamp?.seconds : 'init'}>
+                                            {latestLog ? (<>🚩 <span className="text-blue-400 font-black">[{latestLog.nickname}]</span> {latestLog.mob} 공략 성공</>) : ("새로운 작전 데이터를 기다리는 중...")}
                                         </div>
                                     </div>
-                                    <button onClick={handleResetSession} className="bg-white/10 hover:bg-red-600 text-white p-2.5 md:p-3.5 rounded-xl md:rounded-2xl text-[9px] md:text-[11px] uppercase transition-all border border-white/5 active:scale-90"><i className="fas fa-power-off"></i></button>
+                                    <div className="flex items-center justify-around md:justify-end gap-4 md:gap-10 w-full md:w-auto shrink-0">
+                                        <div className="flex flex-col text-center">
+                                            <span className="text-[8px] md:text-[9px] text-emerald-400 uppercase tracking-[0.1em] mb-0.5">길드 내 랭킹</span>
+                                            <div className="flex items-center justify-center gap-1.5">
+                                                <span className="text-xs md:text-lg font-black italic">{myStatusObj.rank}위</span>
+                                                <span className="text-[8px] md:text-[10px] text-slate-400">({myStatusObj.score}p)</span>
+                                            </div>
+                                        </div>
+                                        <div className="h-8 w-px bg-white/10"></div>
+                                        <div className="flex flex-col text-center">
+                                            <span className="text-[8px] md:text-[9px] text-slate-400 uppercase mb-0.5">시스템 상태</span>
+                                            <div className="flex items-center gap-1.5 justify-center">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                                <span className="text-[9px] md:text-xs uppercase tracking-tighter text-emerald-400">정상</span>
+                                            </div>
+                                        </div>
+                                        <button onClick={handleResetSession} className="bg-white/10 hover:bg-red-600 text-white p-2.5 md:p-3.5 rounded-xl md:rounded-2xl text-[9px] md:text-[11px] uppercase transition-all border border-white/5 active:scale-90"><i className="fas fa-power-off"></i></button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1097,27 +1470,33 @@
                             </div>
                         )}
 
-                        {/* 히스토리 모달 */}
+                        {/* 기록 모달 */}
                         {showHistoryModal && (
                             <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn text-slate-900 dark:text-white" onClick={() => setShowHistoryModal(false)}>
-                                <div className="bg-white dark:bg-slate-900 rounded-[2rem] shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col border-t-8 border-blue-500" onClick={e=>e.stopPropagation()}>
-                                    <div className="p-6 border-b dark:border-slate-800 flex justify-between items-center shrink-0">
+                                <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col border-t-8 border-blue-500" onClick={e=>e.stopPropagation()}>
+                                    <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center shrink-0">
                                         <h3 className="text-lg font-black"><i className="fas fa-history text-blue-500 mr-2"></i>모든 처치 기록</h3>
-                                        <button onClick={() => setShowHistoryModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><i className="fas fa-times"></i></button>
+                                        <button onClick={() => setShowHistoryModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"><i className="fas fa-times text-xl"></i></button>
                                     </div>
-                                    <div className="p-6 overflow-y-auto flex-1 space-y-3">
+                                    <div className="p-6 overflow-y-auto flex-1 space-y-3 no-scrollbar">
                                         {logs.map((l, idx) => (
-                                            <div key={idx} className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700 flex justify-between items-center">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-xs font-black text-blue-600 dark:text-blue-400">{l.nickname}</span>
-                                                    <span className="text-xs text-slate-700 dark:text-slate-300">{l.mob}</span>
+                                            <div key={idx} className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700 flex justify-between items-center hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm shadow-inner shrink-0 ${l.mob === '보스' ? 'bg-red-100 text-red-600 dark:bg-red-900/30' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/30'}`}>
+                                                        <i className={`fas ${l.mob === '보스' ? 'fa-skull' : 'fa-check'}`}></i>
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-sm font-black text-slate-900 dark:text-white">{l.nickname}</div>
+                                                        <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold">{l.mob} 처치</div>
+                                                    </div>
                                                 </div>
                                                 <div className="text-right">
-                                                    <div className="text-[10px] text-slate-400 font-mono">{l.timestamp?.seconds ? new Date(l.timestamp.seconds * 1000).toLocaleString() : ''}</div>
-                                                    <div className="text-[10px] text-slate-500">{l.playMin}분 {l.playSec}초</div>
+                                                    <div className="text-[10px] text-slate-400 dark:text-slate-500 font-mono mb-0.5">{l.timestamp?.seconds ? new Date(l.timestamp.seconds * 1000).toLocaleString() : '방금 전'}</div>
+                                                    <div className="text-[11px] font-black text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-md inline-block">{l.playMin}분 {l.playSec}초 소요</div>
                                                 </div>
                                             </div>
                                         ))}
+                                        {logs.length === 0 && <div className="text-center text-slate-400 dark:text-slate-500 py-10 font-bold">기록이 없습니다.</div>}
                                     </div>
                                 </div>
                             </div>
@@ -1129,39 +1508,108 @@
             return (
                 <React.Fragment>
                     {pageContent}
-                    {/* 모달: 관리자 패스워드 등 공통 UI 모달 */}
+
+                    {/* 길드원 스탯 세팅 팝업 모달 */}
+                    {statModalMember && (
+                        <div className="fixed inset-0 z-[1100] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn font-bold text-slate-900 dark:text-white">
+                            <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl p-8 max-w-sm w-full border-t-[8px] border-blue-500 space-y-6">
+                                <div className="text-center">
+                                    <span className="text-[10px] text-blue-500 dark:text-blue-400 uppercase tracking-widest font-black block mb-1">격추 제원 설정</span>
+                                    <h3 className="text-xl font-black italic break-words">[{statModalMember.name}] 대원 스탯</h3>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700 space-y-4">
+                                        <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-black border-b border-slate-200 dark:border-slate-700 pb-2">A. 스탯공식 자동 계산</span>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="text-[10px] text-slate-500 dark:text-slate-400 block mb-1.5 font-bold">스탯 수치</label>
+                                                <input type="number" placeholder="정수 입력" className="w-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-xl dark:bg-slate-900 text-sm outline-none focus:border-blue-500 text-center font-mono font-bold text-slate-900 dark:text-white" value={inputStat} onChange={e => setInputStat(e.target.value)} onFocus={e=>e.target.select()} />
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] text-slate-500 dark:text-slate-400 block mb-1.5 font-bold">탈것 수치</label>
+                                                <input type="number" placeholder="정수 입력" className="w-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-xl dark:bg-slate-900 text-sm outline-none focus:border-blue-500 text-center font-mono font-bold text-slate-900 dark:text-white" value={inputMount} onChange={e => setInputMount(e.target.value)} onFocus={e=>e.target.select()} />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="text-center text-[10px] text-slate-400 dark:text-slate-500 font-bold bg-slate-100 dark:bg-slate-800 py-1 rounded-full mx-10">OR</div>
+
+                                    <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700 space-y-4">
+                                        <span className="text-[11px] text-amber-500 dark:text-amber-400 block font-black border-b border-slate-200 dark:border-slate-700 pb-2">B. 최종 격추 직접 입력</span>
+                                        <div>
+                                            <input type="number" placeholder="예: 2556" className="w-full p-3 border-2 border-amber-200 dark:border-amber-900/50 rounded-xl dark:bg-slate-900 text-base outline-none focus:border-amber-500 text-center font-mono font-black text-slate-900 dark:text-white" value={inputDirectGyeokchu} onChange={e => setInputDirectGyeokchu(e.target.value)} onFocus={e=>e.target.select()} />
+                                            <p className="text-[9px] text-slate-400 dark:text-slate-500 mt-2 font-bold leading-tight">* 직접 입력 시 자동 계산된 값을 무시하고 이 수치로 강제 고정됩니다.</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3 pt-2">
+                                    <button onClick={() => setStatModalMember(null)} className="py-3.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-2xl text-xs font-black transition-colors">취소</button>
+                                    <button onClick={handleSaveMemberStats} className="py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-black shadow-lg transition-colors">저장 및 반영</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 공통 컴포넌트: 관리자 로그인 */}
                     {showAdminEntry && (
-                        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fadeIn font-bold">
-                            <div className="bg-white dark:bg-slate-800 dashboard-card p-8 w-full max-w-[320px] border-t-8 border-blue-600 shadow-2xl">
-                                <div className="mb-6 text-center">
-                                    <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-1">보안 인증</p>
-                                    <h3 className="text-lg font-black dark:text-white">관리자 코드 입력</h3>
+                        <div className="fixed inset-0 z-[1200] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn font-bold">
+                            <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl p-8 md:p-10 max-w-sm w-full border-t-[8px] border-slate-800 text-center">
+                                <div className="mb-8">
+                                    <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-800 dark:text-slate-300 text-xl"><i className="fas fa-lock"></i></div>
+                                    <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1">보안 인증</p>
+                                    <h3 className="text-xl font-black text-slate-900 dark:text-white">관리자 코드 입력</h3>
                                 </div>
                                 <div className="flex flex-col gap-4">
-                                    <input type="password" autoFocus placeholder="Passkey" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-4 text-center text-xl outline-none focus:border-blue-500 text-slate-900 dark:text-white font-black tracking-widest" value={adminPass} onChange={e => setAdminPass(e.target.value)} onKeyDown={e => { if(e.key === 'Enter' && adminPass === "123456") { setIsAdminMode(true); setShowAdminEntry(false); setAdminPass(""); } }} />
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <button onClick={() => { setShowAdminEntry(false); setAdminPass(""); }} className="py-3 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-white rounded-xl font-bold text-sm">취소</button>
-                                        <button onClick={() => { if(adminPass === "123456") { setIsAdminMode(true); setShowAdminEntry(false); setAdminPass(""); } else { showAlert("비밀번호 오류", "error"); } }} className="py-3 bg-blue-600 text-white rounded-xl font-bold text-sm shadow-lg">인증</button>
+                                    <input type="password" autoFocus placeholder="Passkey" className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-4 text-center text-xl outline-none focus:border-slate-500 text-slate-900 dark:text-white font-black tracking-widest" value={adminPass} onChange={e => setAdminPass(e.target.value)} onKeyDown={e => { if(e.key === 'Enter' && adminPass === "123456") { setIsAdminMode(true); setShowAdminEntry(false); setAdminPass(""); } }} />
+                                    <div className="grid grid-cols-2 gap-3 mt-2">
+                                        <button onClick={() => { setShowAdminEntry(false); setAdminPass(""); }} className="py-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-2xl font-bold transition-colors">취소</button>
+                                        <button onClick={() => { if(adminPass === "123456") { setIsAdminMode(true); setShowAdminEntry(false); setAdminPass(""); } else { showAlert("비밀번호 오류", "error"); } }} className="py-4 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white rounded-2xl font-bold shadow-lg transition-colors">인증</button>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     )}
+
+                    {/* 공통 컴포넌트: 알럿 */}
                     {uiAlert && (
-                        <div className="fixed inset-0 z-[1001] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn text-slate-900 font-bold">
-                            <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl p-10 max-w-sm w-full text-center border-t-[8px] border-blue-500">
-                                <p className="text-lg mb-8 dark:text-white font-bold">{uiAlert.message}</p>
-                                <button onClick={closeAlert} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black shadow-lg">확인</button>
+                        <div className="fixed inset-0 z-[1300] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn text-slate-900 font-bold">
+                            <div className={`bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl p-8 md:p-10 max-w-sm w-full text-center border-t-[8px] ${uiAlert.type === 'error' ? 'border-red-500' : 'border-blue-500'}`}>
+                                <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-6 text-2xl ${uiAlert.type === 'error' ? 'bg-red-100 text-red-500 dark:bg-red-900/30' : 'bg-blue-100 text-blue-500 dark:bg-blue-900/30'}`}>
+                                    <i className={`fas ${uiAlert.type === 'error' ? 'fa-exclamation-triangle' : 'fa-check'}`}></i>
+                                </div>
+                                <p className="text-base md:text-lg mb-8 text-slate-900 dark:text-white font-bold leading-relaxed">{uiAlert.message}</p>
+                                <button onClick={closeAlert} className={`w-full text-white py-4 rounded-2xl font-black shadow-lg transition-colors ${uiAlert.type === 'error' ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-600 hover:bg-blue-700'}`}>확인</button>
                             </div>
                         </div>
                     )}
+
+                    {/* 공통 컴포넌트: 컨펌 (체크박스 지원) */}
                     {uiConfirm && (
-                        <div className="fixed inset-0 z-[1001] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn text-slate-900 font-bold">
-                            <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl p-10 max-w-sm w-full text-center border-t-[8px] border-orange-500">
-                                <p className="text-lg mb-8 dark:text-white font-bold">{uiConfirm.message}</p>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <button onClick={() => setUiConfirm(null)} className="py-4 bg-slate-100 dark:bg-slate-800 dark:text-white rounded-2xl font-bold">취소</button>
-                                    <button onClick={() => { uiConfirm.onConfirm(); setUiConfirm(null); }} className="py-4 bg-orange-500 text-white rounded-2xl font-bold shadow-lg">확인</button>
+                        <div className="fixed inset-0 z-[1300] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn text-slate-900 font-bold">
+                            <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl p-8 md:p-10 max-w-sm w-full text-center border-t-[8px] border-orange-500 flex flex-col">
+                                <div className="w-12 h-12 bg-orange-100 dark:bg-orange-900/30 text-orange-500 rounded-full flex items-center justify-center mx-auto mb-6 text-2xl"><i className="fas fa-question"></i></div>
+                                <p className="text-base md:text-lg mb-6 text-slate-900 dark:text-white font-bold whitespace-pre-wrap leading-relaxed">{uiConfirm.message}</p>
+                                
+                                {uiConfirm.checkboxLabel && (
+                                    <label className="flex items-center justify-center gap-2 mb-8 cursor-pointer text-sm text-slate-700 dark:text-slate-300 p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+                                        <input type="checkbox" id="confirm-checkbox" className="w-5 h-5 accent-orange-500 rounded" />
+                                        <span className="font-bold">{uiConfirm.checkboxLabel}</span>
+                                    </label>
+                                )}
+
+                                <div className={`grid grid-cols-2 gap-3 mt-auto ${!uiConfirm.checkboxLabel ? 'pt-2' : ''}`}>
+                                    <button onClick={() => setUiConfirm(null)} className="py-4 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-2xl font-bold transition-colors">취소</button>
+                                    <button onClick={() => { 
+                                        let isChecked = false;
+                                        if (uiConfirm.checkboxLabel) {
+                                            const cb = document.getElementById('confirm-checkbox');
+                                            if (cb) isChecked = cb.checked;
+                                        }
+                                        uiConfirm.onConfirm(isChecked); 
+                                        setUiConfirm(null); 
+                                    }} className="py-4 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl font-bold shadow-lg transition-colors">확인</button>
                                 </div>
                             </div>
                         </div>
