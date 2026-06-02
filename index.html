@@ -98,7 +98,7 @@
     <script type="text/babel" data-type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp, deleteDoc, doc, setDoc, updateDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp, deleteDoc, doc, updateDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyCOt_5hYk7Y9EDwo1Cd55et5-JT6k7LIcc",
@@ -135,7 +135,7 @@
             { id: 12, name: "길드의 신", score: 10000 },
         ];
 
-        const REWARDS_LIST = ['레시피', '픽업', '룬 소환서', '특수룬 소환서'];
+        const REWARDS_LIST = ['레시피', '픽업', '룬 소환서', '특수룬 소환서', '동료 소환서'];
         const ZOOM_LEVELS = [50, 75, 90, 100, 110, 125, 150, 175, 200];
 
         function App() {
@@ -143,6 +143,7 @@
             const [nickname, setNickname] = useState(localStorage.getItem('cat_hero_nickname') || '');
             const [isNameSet, setIsNameSet] = useState(!!localStorage.getItem('cat_hero_nickname'));
             const [isAdminMode, setIsAdminMode] = useState(false);
+            const [isSuperAdmin, setIsSuperAdmin] = useState(sessionStorage.getItem('isSuperAdmin') === 'true');
             const [adminPass, setAdminPass] = useState("");
             const [showAdminEntry, setShowAdminEntry] = useState(false);
             
@@ -157,6 +158,7 @@
 
             const [mainCategory, setMainCategory] = useState('conquest'); 
             const [conquestFilter, setConquestFilter] = useState('timeSort');
+            const [historyTab, setHistoryTab] = useState('conquest');
 
             const [conquestNormalCount, setConquestNormalCount] = useState(0);
             const [conquestBossCount, setConquestBossCount] = useState(0);
@@ -164,6 +166,7 @@
             const [playSec, setPlaySec] = useState(0);
             
             const [logs, setLogs] = useState([]);
+            const [lootLogs, setLootLogs] = useState([]);
             const [members, setMembers] = useState([]);
             const [notice, setNotice] = useState("시스템 가동 중입니다.");
             const [newNotice, setNewNotice] = useState("");
@@ -192,6 +195,12 @@
             const [distResult, setDistResult] = useState(null);
             const captureRef = useRef(null);
             const ratioCaptureRef = useRef(null); 
+
+            // 수동 이력 추가 관련 상태
+            const [manualLootDate, setManualLootDate] = useState('');
+            const [manualLootItem, setManualLootItem] = useState('룬 소환서');
+            const [manualLootWinner, setManualLootWinner] = useState('');
+            const [manualLootQty, setManualLootQty] = useState(1);
 
             // 분배 애니메이션 연출 상태
             const [isDistAnimating, setIsDistAnimating] = useState(false);
@@ -277,48 +286,53 @@
                 }
             };
 
-            // 1:1 고비율 이미지 캡처 통합 로직
-            const captureImageWithAspect = (ref, prefix) => {
-                if(!ref.current) return;
+            const handleCaptureImage = () => {
+                if(!captureRef.current) return;
                 setTimeout(() => {
-                    html2canvas(ref.current, {
+                    html2canvas(captureRef.current, {
+                        scale: window.devicePixelRatio || 2,
+                        useCORS: true,
+                        backgroundColor: document.documentElement.classList.contains('dark') ? '#0B1220' : '#F8FAFC',
+                        scrollY: -window.scrollY
+                    }).then(canvas => {
+                        const link = document.createElement('a');
+                        link.download = `분배결과_${new Date().getTime()}.png`;
+                        link.href = canvas.toDataURL('image/png', 1.0);
+                        link.click();
+                        showAlert("분배 결과가 이미지로 저장되었습니다.");
+                    }).catch(e => showAlert("이미지 생성 오류", "error"));
+                }, 300); 
+            };
+
+            const handleCaptureRatio = () => {
+                if(!ratioCaptureRef.current) return;
+                setTimeout(() => {
+                    html2canvas(ratioCaptureRef.current, {
                         scale: 2, 
                         useCORS: true,
                         backgroundColor: document.documentElement.classList.contains('dark') ? '#0B1220' : '#F8FAFC',
                         windowWidth: 1000, 
                         onclone: (clonedDoc) => {
-                            const el = clonedDoc.getElementById(ref.current.id);
+                            const el = clonedDoc.getElementById(ratioCaptureRef.current.id);
                             if (el) {
                                 el.style.width = '1000px';
-                                const h = el.offsetHeight;
-                                // 1:1 (1000x1000) 또는 4:5 (1000x1250) 비율 유지
-                                if (h < 1000) {
-                                    el.style.minHeight = '1000px';
-                                    el.style.display = 'flex';
-                                    el.style.flexDirection = 'column';
-                                    el.style.justifyContent = 'center';
-                                } else if (h < 1250) { 
-                                    el.style.minHeight = '1250px';
-                                    el.style.display = 'flex';
-                                    el.style.flexDirection = 'column';
-                                    el.style.justifyContent = 'center';
-                                }
+                                el.style.minHeight = '1000px';
+                                el.style.display = 'flex';
+                                el.style.flexDirection = 'column';
+                                el.style.justifyContent = 'center';
                                 el.style.padding = '60px'; 
                                 el.style.borderRadius = '0px'; 
                             }
                         }
                     }).then(canvas => {
                         const link = document.createElement('a');
-                        link.download = `${prefix}_${new Date().getTime()}.png`;
+                        link.download = `비율결과_${new Date().getTime()}.png`;
                         link.href = canvas.toDataURL('image/png', 1.0);
                         link.click();
-                        showAlert(`${prefix}가 성공적으로 저장되었습니다.`);
+                        showAlert("비율 결과가 1:1 이미지로 저장되었습니다.");
                     }).catch(e => showAlert("이미지 생성 오류", "error"));
-                }, 300);
+                }, 300); 
             };
-
-            const handleCaptureImage = () => captureImageWithAspect(captureRef, "최종분배결과");
-            const handleCaptureRatio = () => captureImageWithAspect(ratioCaptureRef, "격전지비율");
 
             const handleResetDistribution = () => {
                 setUiConfirm({
@@ -399,11 +413,19 @@
                     setLogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)));
                 });
 
+                const unsubLoot = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'loot_history_v24'), (snapshot) => {
+                    setLootLogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => {
+                        const timeA = a.timestamp?.seconds ? a.timestamp.seconds * 1000 : new Date(a.timestamp).getTime();
+                        const timeB = b.timestamp?.seconds ? b.timestamp.seconds * 1000 : new Date(b.timestamp).getTime();
+                        return timeB - timeA;
+                    }));
+                });
+
                 const unsubSettings = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), (snapshot) => {
                     if (snapshot.exists()) setNotice(snapshot.data().notice || "");
                 });
 
-                return () => { unsubMembers(); unsubLogs(); unsubSettings(); };
+                return () => { unsubMembers(); unsubLogs(); unsubLoot(); unsubSettings(); };
             }, [user, nickname]);
 
             const stats = useMemo(() => {
@@ -433,33 +455,36 @@
                 return { playerMap };
             }, [logs, members]);
 
-            // 관리자가 덮어쓴 포인트를 가져오는 헬퍼 함수
-            const getMemberPoints = (member) => {
-                if (member.manualPoints !== undefined && member.manualPoints !== null) return member.manualPoints;
-                return stats.playerMap[member.name]?.points || 0;
-            };
-
             const rankingData = useMemo(() => {
                 const sortedByPoints = [...members].sort((a, b) => {
-                    const statA = stats.playerMap[a.name] || { bossCount: 0, latestTime: 0 };
-                    const statB = stats.playerMap[b.name] || { bossCount: 0, latestTime: 0 };
+                    const statA = stats.playerMap[a.name] || { points: 0, bossCount: 0, latestTime: 0 };
+                    const statB = stats.playerMap[b.name] || { points: 0, bossCount: 0, latestTime: 0 };
                     
-                    const pointsA = getMemberPoints(a);
-                    const pointsB = getMemberPoints(b);
+                    const pointsA = a.rankingPoints !== undefined ? a.rankingPoints : statA.points;
+                    const pointsB = b.rankingPoints !== undefined ? b.rankingPoints : statB.points;
 
                     if (pointsB !== pointsA) return pointsB - pointsA;
-                    if (statB.bossCount !== statA.bossCount) return statB.bossCount - statA.bossCount;
-                    if (statB.latestTime !== statA.latestTime) return statB.latestTime - statA.latestTime;
+                    
+                    const bossA = a.rankingBoss !== undefined ? a.rankingBoss : statA.bossCount;
+                    const bossB = b.rankingBoss !== undefined ? b.rankingBoss : statB.bossCount;
+                    if (bossB !== bossA) return bossB - bossA;
+                    
+                    const timeA = a.latestTime?.seconds ? a.latestTime.seconds : statA.latestTime;
+                    const timeB = b.latestTime?.seconds ? b.latestTime.seconds : statB.latestTime;
+                    if (timeB !== timeA) return timeB - timeA;
+                    
                     return a.name.localeCompare(b.name);
                 });
 
                 const getPersonalStatus = (name) => {
                     const m = members.find(mem => mem.name === name) || { score: 0 };
                     const pStat = stats.playerMap[name] || { points: 0 };
-                    const currentPoints = getMemberPoints(m);
+                    const currentPoints = m.rankingPoints !== undefined ? m.rankingPoints : pStat.points;
+                    
                     const currentTitle = [...TITLES_LIST].reverse().find(t => currentPoints >= t.score) || TITLES_LIST[0];
                     const nextTitle = TITLES_LIST.find(t => t.score > currentPoints);
                     const rankIdx = sortedByPoints.findIndex(mem => mem.name === name);
+                    
                     return { currentTitle, nextTitle, score: currentPoints, rank: rankIdx + 1, rankObj: m };
                 };
                 
@@ -484,13 +509,24 @@
                 return [...members]
                     .filter(m => !adminSearch || m.name.toLowerCase().includes(adminSearch.toLowerCase()))
                     .sort((a, b) => {
-                        const statA = stats.playerMap[a.name] || { latestTime: 0, swords: 0 };
-                        const statB = stats.playerMap[b.name] || { latestTime: 0, swords: 0 };
+                        const statA = stats.playerMap[a.name] || { points: 0, latestTime: 0, swords: 0 };
+                        const statB = stats.playerMap[b.name] || { points: 0, latestTime: 0, swords: 0 };
+                        
+                        const pointsA = a.rankingPoints !== undefined ? a.rankingPoints : statA.points;
+                        const pointsB = b.rankingPoints !== undefined ? b.rankingPoints : statB.points;
 
-                        if (adminSortType === 'score') return getMemberPoints(b) - getMemberPoints(a);
+                        if (adminSortType === 'score') return pointsB - pointsA;
                         if (adminSortType === 'gyeokchu') return getMemberGyeokchu(b) - getMemberGyeokchu(a);
-                        if (adminSortType === 'latest') return statB.latestTime - statA.latestTime;
-                        if (adminSortType === 'count') return statB.swords - statA.swords;
+                        if (adminSortType === 'latest') {
+                            const timeA = a.latestTime?.seconds ? a.latestTime.seconds : statA.latestTime;
+                            const timeB = b.latestTime?.seconds ? b.latestTime.seconds : statB.latestTime;
+                            return timeB - timeA;
+                        }
+                        if (adminSortType === 'count') {
+                            const countA = a.rankingNormal !== undefined ? (a.rankingNormal + (a.rankingBoss || 0)) : statA.swords;
+                            const countB = b.rankingNormal !== undefined ? (b.rankingNormal + (b.rankingBoss || 0)) : statB.swords;
+                            return countB - countA;
+                        }
                         return 0;
                     });
             }, [members, adminSearch, adminSortType, stats]);
@@ -523,7 +559,20 @@
                     for(let i=0; i<conquestBossCount; i++){
                         await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24'), { nickname, mob: '보스', playMin: Number(playMin), playSec: Number(playSec), groupId: batchGroupId, timestamp: serverTimestamp(), uid: user.uid });
                     }
-                    if (member) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', member.id), { score: (member.score || 0) + (totalCount * 5) });
+                    
+                    if (member) {
+                        const currentPoints = member.rankingPoints !== undefined ? member.rankingPoints : (stats.playerMap[nickname]?.points || 0);
+                        const currentNormal = member.rankingNormal !== undefined ? member.rankingNormal : (stats.playerMap[nickname]?.normalCount || 0);
+                        const currentBoss = member.rankingBoss !== undefined ? member.rankingBoss : (stats.playerMap[nickname]?.bossCount || 0);
+
+                        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', member.id), { 
+                            score: (member.score || 0) + (totalCount * 5),
+                            rankingPoints: currentPoints + (conquestNormalCount * 5) + (conquestBossCount * 10),
+                            rankingNormal: currentNormal + conquestNormalCount,
+                            rankingBoss: currentBoss + conquestBossCount,
+                            latestTime: serverTimestamp()
+                        });
+                    }
                     
                     setConquestNormalCount(0); setConquestBossCount(0); setPlayMin(0); setPlaySec(0);
                     showAlert(`총 ${totalCount}건의 작전 기록이 승인되었습니다.`);
@@ -532,7 +581,7 @@
 
             const handleUndoLastConquest = async () => {
                 const myLogs = logs.filter(l => l.nickname === nickname).sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
-                if (myLogs.length === 0) return showAlert("취소할 기록이 없습니다.", "error");
+                if (myLogs.length === 0) return showAlert("취소할 최근 기록이 없습니다.", "error");
                 const latestLogDoc = myLogs[0];
                 const targetGroupId = latestLogDoc.groupId;
                 
@@ -542,15 +591,46 @@
                     message: `마지막으로 등록한 ${targetLogs.length}건의 기록을 취소하시겠습니까?`,
                     onConfirm: async () => {
                         try {
+                            let normalToUndo = 0;
+                            let bossToUndo = 0;
                             for(const tl of targetLogs) {
+                                if (tl.mob === '일반몹') normalToUndo++;
+                                else if (tl.mob === '보스') bossToUndo++;
                                 await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24', tl.id));
                             }
                             const member = members.find(m => m.name === nickname);
-                            if (member) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', member.id), { score: Math.max(0, (member.score || 0) - (targetLogs.length * 5)) });
-                            showAlert("기록이 취소되었습니다.");
+                            if (member) {
+                                const currentPoints = member.rankingPoints !== undefined ? member.rankingPoints : (stats.playerMap[nickname]?.points || 0);
+                                const currentNormal = member.rankingNormal !== undefined ? member.rankingNormal : (stats.playerMap[nickname]?.normalCount || 0);
+                                const currentBoss = member.rankingBoss !== undefined ? member.rankingBoss : (stats.playerMap[nickname]?.bossCount || 0);
+
+                                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', member.id), { 
+                                    score: Math.max(0, (member.score || 0) - (targetLogs.length * 5)),
+                                    rankingPoints: Math.max(0, currentPoints - (normalToUndo * 5) - (bossToUndo * 10)),
+                                    rankingNormal: Math.max(0, currentNormal - normalToUndo),
+                                    rankingBoss: Math.max(0, currentBoss - bossToUndo)
+                                });
+                            }
+                            showAlert("기록이 성공적으로 취소 및 차감되었습니다.");
                         } catch (err) { showAlert("취소 실패", "error"); }
                     }
                 });
+            };
+
+            const handleAddManualLoot = async (e) => {
+                e.preventDefault();
+                if(!manualLootWinner) return showAlert("당첨될 길드원을 지정해주세요.", "error");
+                try {
+                    const ts = manualLootDate ? new Date(manualLootDate) : new Date();
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'loot_history_v24'), {
+                        distType: '수동 이력 추가',
+                        list: [{ itemStr: `${manualLootItem} x${manualLootQty}`, winner: manualLootWinner }],
+                        timestamp: ts
+                    });
+                    showAlert("수동 이력이 정상 추가되었습니다.");
+                    setManualLootQty(1);
+                    setManualLootWinner('');
+                } catch(err) { showAlert("저장 실패", "error"); }
             };
 
             const calcStrikeReport = useMemo(() => {
@@ -572,11 +652,25 @@
                 const individualReports = activeMembers.map(m => {
                     const rate = totalGyeokchu > 0 ? (m.gyeokchu / totalGyeokchu) * 100 : 0;
                     const score = totalGyeokchu > 0 ? Math.round(bScore * (m.gyeokchu / totalGyeokchu)) : 0;
-                    return { ...m, rate: Number(rate.toFixed(2)), expectedScore: score };
+                    
+                    const indExpectedSec1x = (bScore > 0 && m.gyeokchu > 0) ? Math.ceil(bScore / m.gyeokchu) : 0;
+                    const indExpectedSec2x = (bScore > 0 && m.gyeokchu > 0) ? Math.ceil(bScore / (m.gyeokchu * 2)) : 0;
+
+                    return { ...m, rate: Number(rate.toFixed(2)), expectedScore: score, indExpectedSec1x, indExpectedSec2x };
                 }).sort((a, b) => b.gyeokchu - a.gyeokchu);
 
                 return { totalGyeokchu, expectedSeconds, individualReports };
             }, [selectedCalcMembers, members, bossScoreStr]);
+
+            const saveDistributionHistory = async (result) => {
+                try {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'loot_history_v24'), {
+                        distType: result.type,
+                        list: result.list,
+                        timestamp: serverTimestamp()
+                    });
+                } catch (err) { console.error("Failed to save history", err); }
+            };
 
             const executeDistribution = (type) => {
                 if(selectedCalcMembers.length === 0) return showAlert("참여 길드원이 없습니다.", "error");
@@ -632,13 +726,16 @@
                     });
                 }
 
+                const finalResult = { type: type === 'random' ? '무작위 랜덤 분배' : '기여도 기반 분배', list: resultArr };
+
                 if (enableAnimation) {
                     setDistResult(null);
                     setTempDistList(resultArr);
                     setIsDistAnimating(true);
                     setSlotDisplayNames(resultArr.map(() => pNames[Math.floor(Math.random() * pNames.length)]));
                 } else {
-                    setDistResult({ type: type === 'random' ? '무작위 랜덤 분배' : '기여도 기반 분배', list: resultArr });
+                    setDistResult(finalResult);
+                    saveDistributionHistory(finalResult);
                 }
             };
 
@@ -654,7 +751,9 @@
                     }
                     timeout = setTimeout(() => {
                         setIsDistAnimating(false);
-                        setDistResult({ type: tempDistList[0]?.isRandom ? '무작위 랜덤 분배' : '기여도 기반 분배', list: tempDistList });
+                        const finalResult = { type: tempDistList[0]?.isRandom ? '무작위 랜덤 분배' : '기여도 기반 분배', list: tempDistList };
+                        setDistResult(finalResult);
+                        saveDistributionHistory(finalResult);
                     }, 2500); 
                 }
                 return () => { clearInterval(interval); clearTimeout(timeout); };
@@ -662,7 +761,9 @@
 
             const handleSkipAnimation = () => {
                 setIsDistAnimating(false);
-                setDistResult({ type: tempDistList[0]?.isRandom ? '무작위 랜덤 분배' : '기여도 기반 분배', list: tempDistList });
+                const finalResult = { type: tempDistList[0]?.isRandom ? '무작위 랜덤 분배' : '기여도 기반 분배', list: tempDistList };
+                setDistResult(finalResult);
+                saveDistributionHistory(finalResult);
             };
 
             const groupedDistResult = useMemo(() => {
@@ -704,8 +805,8 @@
                                     <section>
                                         <label className="text-[10px] text-slate-400 uppercase tracking-widest mb-3 block font-bold">데이터 관리 도구</label>
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                            <button onClick={() => setUiConfirm({ message: "균격 기록을 삭제합니까?", onConfirm: async () => { const snap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24')); for (const d of snap.docs) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24', d.id)); showAlert("기록이 초기화되었습니다."); } })} className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900 rounded-xl text-blue-600 dark:text-blue-400 text-xs font-black uppercase hover:bg-blue-100 transition-colors">기록(균격) 초기화</button>
-                                            <button onClick={() => setUiConfirm({ message: "랭킹 점수를 초기화합니까?", onConfirm: async () => { for (const m of members) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', m.id), { score: 0 }); showAlert("점수가 초기화되었습니다."); } })} className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900 rounded-xl text-red-600 dark:text-red-400 text-xs font-black uppercase hover:bg-red-100 transition-colors">랭킹(점수) 초기화</button>
+                                            <button onClick={() => setUiConfirm({ message: "균격 기록을 삭제합니까?\n(랭킹 누적 포인트 및 시즌 통계는 안전하게 보존됩니다)", onConfirm: async () => { const snap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24')); for (const d of snap.docs) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24', d.id)); showAlert("기록이 초기화되었습니다."); } })} className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900 rounded-xl text-blue-600 dark:text-blue-400 text-xs font-black uppercase hover:bg-blue-100 transition-colors">기록(균격) 초기화</button>
+                                            <button onClick={() => setUiConfirm({ message: "랭킹 점수를 완전 초기화합니까?", onConfirm: async () => { for (const m of members) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', m.id), { rankingPoints: 0, rankingNormal: 0, rankingBoss: 0, score: 0 }); showAlert("점수가 0으로 초기화되었습니다."); } })} className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900 rounded-xl text-red-600 dark:text-red-400 text-xs font-black uppercase hover:bg-red-100 transition-colors">랭킹(점수) 초기화</button>
                                         </div>
                                     </section>
                                     
@@ -732,7 +833,7 @@
                                                 <option value="count">참여 횟수순</option>
                                             </select>
                                             <div className="relative flex-1">
-                                                <input type="text" value={adminSearch} onChange={e => setAdminSearch(e.target.value)} placeholder="🔍 닉네임 검색" className="w-full p-2 pl-8 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:border-blue-500 bg-white dark:bg-slate-800" />
+                                                <input type="text" value={adminSearch} onChange={e => setAdminSearch(e.target.value)} placeholder="🔍 길드원 이름 검색" className="w-full p-2 pl-8 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:border-blue-500 bg-white dark:bg-slate-800" />
                                                 <i className="fas fa-search absolute left-3 top-[10px] text-[10px] text-slate-400"></i>
                                             </div>
                                         </div>
@@ -743,6 +844,8 @@
                                             const mStat = stats.playerMap[m.name] || {};
                                             const isFav = favorites.includes(m.name);
                                             const gyeokchu = getMemberGyeokchu(m);
+                                            const pts = m.rankingPoints !== undefined ? m.rankingPoints : (mStat.points || 0);
+
                                             return (
                                                 <div key={m.id} className="p-4 md:p-5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b dark:border-slate-800 last:border-b-0 flex flex-col gap-4">
                                                     <div className="flex justify-between items-start">
@@ -753,8 +856,8 @@
                                                             <div>
                                                                 <span className="font-black text-blue-600 dark:text-blue-400 text-base">{m.name}</span>
                                                                 <div className="text-[10px] text-slate-500 flex items-center gap-3 mt-1 font-mono">
-                                                                    <span>참여: {mStat.swords || 0}회</span>
-                                                                    <span>최근: {mStat.latestTime ? new Date(mStat.latestTime * 1000).toLocaleDateString() : '없음'}</span>
+                                                                    <span>참여: {m.rankingNormal !== undefined ? (m.rankingNormal + (m.rankingBoss||0)) : (mStat.swords || 0)}회</span>
+                                                                    <span>최근: {m.latestTime?.seconds ? new Date(m.latestTime.seconds * 1000).toLocaleDateString() : (mStat.latestTime ? new Date(mStat.latestTime * 1000).toLocaleDateString() : '없음')}</span>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -764,19 +867,19 @@
                                                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 dark:bg-slate-950/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
                                                         <div className="flex flex-col gap-1">
                                                             <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">스탯 <span className="text-slate-300 font-normal">(수식용)</span></span>
-                                                            <input type="number" className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-center dark:bg-slate-800 outline-none focus:border-blue-500 text-xs font-mono" defaultValue={m.stat||''} onBlur={(e) => handleAdminUpdateField(m.id, 'stat', e.target.value ? Number(e.target.value) : null)} onFocus={e=>e.target.select()} placeholder="입력" />
+                                                            <input type="number" className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-center dark:bg-slate-800 outline-none focus:border-blue-500 text-xs font-mono" defaultValue={m.stat||''} onBlur={(e) => handleAdminUpdateField(m.id, 'stat', e.target.value ? Number(e.target.value) : null)} onFocus={e=>e.target.select()} placeholder="값 입력" />
                                                         </div>
                                                         <div className="flex flex-col gap-1">
                                                             <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">탈것 <span className="text-slate-300 font-normal">(수식용)</span></span>
-                                                            <input type="number" className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-center dark:bg-slate-800 outline-none focus:border-blue-500 text-xs font-mono" defaultValue={m.mount||''} onBlur={(e) => handleAdminUpdateField(m.id, 'mount', e.target.value ? Number(e.target.value) : null)} onFocus={e=>e.target.select()} placeholder="입력" />
+                                                            <input type="number" className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-center dark:bg-slate-800 outline-none focus:border-blue-500 text-xs font-mono" defaultValue={m.mount||''} onBlur={(e) => handleAdminUpdateField(m.id, 'mount', e.target.value ? Number(e.target.value) : null)} onFocus={e=>e.target.select()} placeholder="값 입력" />
                                                         </div>
                                                         <div className="flex flex-col gap-1">
                                                             <span className="text-[10px] text-amber-500 uppercase font-bold tracking-wider">직접 격추 <span className="text-amber-300 font-normal">(최우선)</span></span>
-                                                            <input type="number" className="w-full p-2 border border-amber-200 dark:border-amber-900/50 bg-amber-50/30 rounded-lg text-center dark:bg-slate-800 text-amber-600 dark:text-amber-400 outline-none focus:border-amber-500 text-xs font-mono font-bold" defaultValue={m.directGyeokchu||''} onBlur={(e) => handleAdminUpdateField(m.id, 'directGyeokchu', e.target.value ? Number(e.target.value) : null)} onFocus={e=>e.target.select()} placeholder={gyeokchu > 0 ? `(${gyeokchu})` : '입력'} />
+                                                            <input type="number" className="w-full p-2 border border-amber-200 dark:border-amber-900/50 bg-amber-50/30 rounded-lg text-center dark:bg-slate-800 text-amber-600 dark:text-amber-400 outline-none focus:border-amber-500 text-xs font-mono font-bold" defaultValue={m.directGyeokchu||''} onBlur={(e) => handleAdminUpdateField(m.id, 'directGyeokchu', e.target.value ? Number(e.target.value) : null)} onFocus={e=>e.target.select()} placeholder={gyeokchu > 0 ? `(${gyeokchu})` : '값 입력'} />
                                                         </div>
                                                         <div className="flex flex-col gap-1">
                                                             <span className="text-[10px] text-blue-500 uppercase font-bold tracking-wider">누적 포인트 <span className="text-blue-300 font-normal">(조정 가능)</span></span>
-                                                            <input type="number" className="w-full p-2 border border-blue-200 dark:border-blue-900/50 bg-blue-50/30 rounded-lg text-center dark:bg-slate-800 text-blue-600 dark:text-blue-400 outline-none focus:border-blue-500 text-xs font-mono font-black" defaultValue={m.manualPoints !== undefined && m.manualPoints !== null ? m.manualPoints : (mStat.points || 0)} onBlur={(e) => handleAdminUpdateField(m.id, 'manualPoints', e.target.value === '' ? null : Number(e.target.value))} onFocus={e=>e.target.select()} placeholder="입력" />
+                                                            <input type="number" className="w-full p-2 border border-blue-200 dark:border-blue-900/50 bg-blue-50/30 rounded-lg text-center dark:bg-slate-800 text-blue-600 dark:text-blue-400 outline-none focus:border-blue-500 text-xs font-mono font-black" defaultValue={pts} onBlur={(e) => handleAdminUpdateField(m.id, 'rankingPoints', Number(e.target.value))} onFocus={e=>e.target.select()} placeholder="값 입력" />
                                                         </div>
                                                     </div>
                                                 </div>
@@ -835,46 +938,36 @@
 
                 pageContent = (
                     <div className="app-container pb-40">
-                        <header className="bg-white dark:bg-slate-900 p-4 border-b-2 border-slate-100 dark:border-slate-800 sticky top-0 z-30 shadow-sm">
-                            <div className="flex justify-between items-center gap-4">
-                                <div className="flex items-center gap-2 md:gap-3 min-w-0">
-                                    <button onClick={handleResetSession} className="shrink-0 w-10 h-10 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-500 hover:text-red-500 transition-all shadow-sm flex items-center justify-center font-bold">
+                        <header className="bg-white dark:bg-slate-900 p-3 sm:p-4 border-b-2 border-slate-100 dark:border-slate-800 sticky top-0 z-30 shadow-sm">
+                            <div className="flex justify-between items-center gap-2 sm:gap-4">
+                                <div className="flex items-center gap-1 sm:gap-3 min-w-0">
+                                    <button onClick={handleResetSession} className="shrink-0 w-8 h-8 sm:w-10 sm:h-10 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-500 hover:text-red-500 transition-all shadow-sm flex items-center justify-center font-bold">
                                         <i className="fas fa-power-off"></i>
                                     </button>
                                     <div className="space-y-1 min-w-0">
                                         <div className="flex gap-1 md:gap-2 overflow-x-auto no-scrollbar pb-1">
-                                            <button onClick={() => setMainCategory('conquest')} className={`shrink-0 px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black transition-all ${mainCategory === 'conquest' ? 'main-tab-active' : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>01. 균격</button>
-                                            <button onClick={() => setMainCategory('strike')} className={`shrink-0 px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black transition-all ${mainCategory === 'strike' ? 'main-tab-active' : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>02. 일격</button>
-                                            <button onClick={() => setMainCategory('ranking')} className={`shrink-0 px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black transition-all ${mainCategory === 'ranking' ? 'main-tab-active bg-yellow-500 border-yellow-600 text-white shadow-yellow-500/30' : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>03. 랭킹</button>
-                                            <button onClick={() => setMainCategory('history')} className={`shrink-0 px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black transition-all ${mainCategory === 'history' ? 'main-tab-active bg-pink-500 border-pink-600 text-white shadow-pink-500/30' : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>04. 기록</button>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shrink-0"></span>
-                                            <span className="text-[9px] md:text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest truncate">로그인: <span className="text-blue-600 dark:text-blue-400 font-bold">{nickname}</span></span>
+                                            <button onClick={() => setMainCategory('conquest')} className={`shrink-0 px-2 sm:px-3 py-1.5 rounded-lg text-[9px] sm:text-[10px] md:text-xs font-black transition-all ${mainCategory === 'conquest' ? 'main-tab-active' : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>01. 균격</button>
+                                            <button onClick={() => setMainCategory('strike')} className={`shrink-0 px-2 sm:px-3 py-1.5 rounded-lg text-[9px] sm:text-[10px] md:text-xs font-black transition-all ${mainCategory === 'strike' ? 'main-tab-active' : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>02. 일격</button>
+                                            <button onClick={() => setMainCategory('ranking')} className={`shrink-0 px-2 sm:px-3 py-1.5 rounded-lg text-[9px] sm:text-[10px] md:text-xs font-black transition-all ${mainCategory === 'ranking' ? 'main-tab-active bg-yellow-500 border-yellow-600 text-white shadow-yellow-500/30' : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>03. 랭킹</button>
+                                            <button onClick={() => setMainCategory('history')} className={`shrink-0 px-2 sm:px-3 py-1.5 rounded-lg text-[9px] sm:text-[10px] md:text-xs font-black transition-all ${mainCategory === 'history' ? 'main-tab-active bg-pink-500 border-pink-600 text-white shadow-pink-500/30' : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>04. 기록</button>
                                         </div>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2 shrink-0">
-                                    <div className="hidden sm:flex items-center gap-2 mr-2">
-                                        <label className="text-[9px] text-slate-500 font-bold cursor-pointer flex items-center gap-1.5">
-                                            <input type="checkbox" className="w-3 h-3 accent-blue-500" checked={enableAnimation} onChange={e => setEnableAnimation(e.target.checked)} />
-                                            분배 효과
-                                        </label>
-                                    </div>
-                                    
-                                    <div className="hidden md:flex items-center bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1">
-                                        <button onClick={() => setZoomIndex(p => Math.max(0, p-1))} className="px-2 text-slate-500 hover:text-blue-500 font-black">-</button>
-                                        <button onClick={() => setZoomIndex(3)} className="px-1 text-[9px] text-slate-500 font-bold w-10 text-center hover:text-blue-500 transition-colors">{ZOOM_LEVELS[zoomIndex]}%</button>
-                                        <button onClick={() => setZoomIndex(p => Math.min(ZOOM_LEVELS.length-1, p+1))} className="px-2 text-slate-500 hover:text-blue-500 font-black">+</button>
+                                
+                                <div className="flex items-center gap-1 md:gap-2 shrink-0">
+                                    <div className="flex items-center bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-0.5 sm:p-1">
+                                        <button onClick={() => setZoomIndex(p => Math.max(0, p-1))} className="px-1.5 sm:px-2 text-slate-500 hover:text-blue-500 font-black">-</button>
+                                        <button onClick={() => setZoomIndex(3)} className="px-1 text-[8px] sm:text-[9px] text-slate-500 font-bold w-8 sm:w-10 text-center hover:text-blue-500 transition-colors">{ZOOM_LEVELS[zoomIndex]}%</button>
+                                        <button onClick={() => setZoomIndex(p => Math.min(ZOOM_LEVELS.length-1, p+1))} className="px-1.5 sm:px-2 text-slate-500 hover:text-blue-500 font-black">+</button>
                                     </div>
 
-                                    <select className="hidden md:block text-[10px] p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg outline-none font-bold text-slate-500 dark:text-slate-400" value={themeMode} onChange={e => setThemeMode(e.target.value)}>
-                                        <option value="light">☀️ 라이트 모드</option>
-                                        <option value="dark">🌙 다크 모드</option>
-                                        <option value="system">⚙️ 시스템 모드</option>
+                                    <select className="text-[9px] sm:text-[10px] p-1 sm:p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg outline-none font-bold text-slate-500 dark:text-slate-400" value={themeMode} onChange={e => setThemeMode(e.target.value)}>
+                                        <option value="light">☀️</option>
+                                        <option value="dark">🌙</option>
+                                        <option value="system">⚙️</option>
                                     </select>
                                     
-                                    <button onClick={() => setShowAdminEntry(true)} className="w-9 h-9 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-center text-slate-400 hover:text-blue-500 transition-colors shadow-sm"><i className="fas fa-cog"></i></button>
+                                    <button onClick={() => setShowAdminEntry(true)} className="w-7 h-7 sm:w-9 sm:h-9 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-center text-slate-400 hover:text-blue-500 transition-colors shadow-sm"><i className="fas fa-cog"></i></button>
                                 </div>
                             </div>
                         </header>
@@ -896,7 +989,7 @@
                                         <div className="dashboard-card p-5 space-y-4">
                                             <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
                                                 <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2"><i className="fas fa-broadcast-tower text-red-500 animate-pulse"></i> 실시간 처치 기록</h3>
-                                                <button onClick={() => setShowHistoryModal(true)} className="text-[10px] text-blue-500 dark:text-blue-400 font-bold hover:underline">전체 보기</button>
+                                                <button onClick={() => {setMainCategory('history'); setHistoryTab('conquest');}} className="text-[10px] text-blue-500 dark:text-blue-400 font-bold hover:underline">전체 보기</button>
                                             </div>
                                             <div className="space-y-2.5 max-h-[150px] overflow-y-auto no-scrollbar">
                                                 {logs.slice(0, 5).map((l, idx) => (
@@ -962,7 +1055,7 @@
                                         <div className="agent-grid">
                                             {sortedConquestMembers.map(mDoc => {
                                                 const st = stats.playerMap[mDoc.name] || { swords: 0, totalInputTimeSec: 0 };
-                                                const usedSwordsCount = st.swords || 0;
+                                                const usedSwordsCount = mDoc.rankingNormal !== undefined ? (mDoc.rankingNormal + (mDoc.rankingBoss||0)) : (st.swords || 0);
                                                 const totalBudgetSec = TOTAL_RESOURCES * BASE_TIME_PER_SWORD * 60; 
                                                 const remainingSec = Math.max(0, totalBudgetSec - st.totalInputTimeSec);
                                                 const isInactive = usedSwordsCount === 0;
@@ -1016,11 +1109,11 @@
                                                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 items-end">
                                                     <div className="space-y-1">
                                                         <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold">스탯 값 입력 (소수점 제외)</label>
-                                                        <input type="number" className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none font-mono text-xs focus:border-blue-500 text-slate-900 dark:text-white" value={myStat} onChange={e => setMyStat(e.target.value.replace(/[^0-9]/g, ''))} onFocus={e=>e.target.select()} placeholder="입력" />
+                                                        <input type="number" className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none font-mono text-xs focus:border-blue-500 text-slate-900 dark:text-white" value={myStat} onChange={e => setMyStat(e.target.value.replace(/[^0-9]/g, ''))} onFocus={e=>e.target.select()} placeholder="값 입력" />
                                                     </div>
                                                     <div className="space-y-1">
                                                         <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold">탈것 값 입력</label>
-                                                        <input type="number" className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none font-mono text-xs focus:border-blue-500 text-slate-900 dark:text-white" value={myMount} onChange={e => setMyMount(e.target.value.replace(/[^0-9]/g, ''))} onFocus={e=>e.target.select()} placeholder="입력" />
+                                                        <input type="number" className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none font-mono text-xs focus:border-blue-500 text-slate-900 dark:text-white" value={myMount} onChange={e => setMyMount(e.target.value.replace(/[^0-9]/g, ''))} onFocus={e=>e.target.select()} placeholder="값 입력" />
                                                     </div>
                                                     <div className="flex gap-2 h-[42px]">
                                                         <div className="flex-1 bg-slate-900 dark:bg-[#0B1220] text-white rounded-lg flex items-center justify-center text-xs font-mono font-bold shadow-inner">
@@ -1048,7 +1141,7 @@
                                                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                                                         <div className="space-y-1">
                                                             <label className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-widest block font-bold">2단계: 참여 길드원 선택 ({selectedCalcMembers.length}명 지정됨)</label>
-                                                            <p className="text-[10px] text-slate-400 dark:text-slate-500">타 길드원의 격추는 연산에만 사용되며, 스텟은 본인만 수정 가능합니다.</p>
+                                                            <p className="text-[10px] text-slate-400 dark:text-slate-500">타 길드원의 격추는 연산에만 사용되며, 스탯은 본인만 수정 가능합니다.</p>
                                                         </div>
                                                         <div className="flex w-full sm:w-auto gap-2">
                                                             <button onClick={() => setSelectedCalcMembers([])} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-black rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 shrink-0 transition-colors">전체 선택 해제</button>
@@ -1072,7 +1165,7 @@
                                                                             <span className={`text-xs font-black break-words ${isSelected ? 'text-blue-600 dark:text-blue-400' : 'text-slate-800 dark:text-slate-200'}`}>{m.name}</span>
                                                                         </div>
                                                                         <div className={`text-[10px] font-bold font-mono mt-1 pl-5 ${gyeokchu > 0 ? 'text-slate-500 dark:text-slate-400' : 'text-red-400'}`}>
-                                                                            격추: {gyeokchu > 0 ? gyeokchu.toLocaleString() : '미등록'}
+                                                                            {gyeokchu > 0 ? `격추: ${gyeokchu.toLocaleString()}` : '격추 미등록'}
                                                                         </div>
                                                                     </div>
                                                                     <button type="button" onClick={(e) => toggleFavorite(e, m.name)} className="shrink-0 p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
@@ -1094,12 +1187,15 @@
                                                                 txt += `━━━━━━━━━━━━\n`;
                                                                 calcStrikeReport.individualReports.forEach(r => {
                                                                     if (bossScoreStr) {
-                                                                        txt += `${r.name}\n기여율 : ${r.rate}% (남은 ${(100 - r.rate).toFixed(2)}%)\n예상 점수 : ${r.expectedScore.toLocaleString()}\n`;
+                                                                        const min1x = Math.floor(r.indExpectedSec1x / 60);
+                                                                        const sec1x = r.indExpectedSec1x % 60;
+                                                                        const min2x = Math.floor(r.indExpectedSec2x / 60);
+                                                                        const sec2x = r.indExpectedSec2x % 60;
+                                                                        txt += `${r.name}\n기여율 : ${r.rate}% (남은 ${(100 - r.rate).toFixed(2)}%)\n예상 시간 (1배속) : ${min1x}분 ${sec1x}초\n예상 시간 (2배속) : ${min2x}분 ${sec2x}초\n예상 점수 : ${r.expectedScore.toLocaleString()}\n━━━━━━━━━━━━\n`;
                                                                     } else {
-                                                                        txt += `${r.name} : ${r.rate}% (남은 ${(100 - r.rate).toFixed(2)}%)\n`;
+                                                                        txt += `${r.name}\n기여율 : ${r.rate}% (남은 ${(100 - r.rate).toFixed(2)}%)\n━━━━━━━━━━━━\n`;
                                                                     }
                                                                 });
-                                                                txt += `━━━━━━━━━━━━`;
                                                                 copyToClipboard(txt);
                                                             }} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg text-[10px] font-black text-slate-700 dark:text-slate-300 transition-colors shadow-sm"><i className="far fa-copy mr-1"></i>텍스트 복사</button>
                                                             <button onClick={handleCaptureRatio} className="px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-800/50 rounded-lg text-[10px] font-black transition-colors shadow-sm"><i className="fas fa-camera mr-1"></i>결과 이미지 저장</button>
@@ -1129,7 +1225,13 @@
                                                         </div>
 
                                                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                                            {calcStrikeReport.individualReports.map((report, idx) => (
+                                                            {calcStrikeReport.individualReports.map((report, idx) => {
+                                                                const min1x = Math.floor(report.indExpectedSec1x / 60);
+                                                                const sec1x = report.indExpectedSec1x % 60;
+                                                                const min2x = Math.floor(report.indExpectedSec2x / 60);
+                                                                const sec2x = report.indExpectedSec2x % 60;
+                                                                
+                                                                return (
                                                                 <div key={report.id} className={`p-4 rounded-xl border ${idx === 0 ? 'border-amber-400 bg-amber-50/30 dark:bg-amber-950/20' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50'} flex flex-col`}>
                                                                     <div className="flex items-center gap-2 mb-2 border-b border-slate-200 dark:border-slate-700/50 pb-2">
                                                                         {idx === 0 && <span className="text-sm">👑</span>}
@@ -1141,6 +1243,19 @@
                                                                     </div>
                                                                     <div className="text-[9px] text-right text-slate-400 font-bold mb-3">(남은 {(100-report.rate).toFixed(2)}%)</div>
                                                                     
+                                                                    {bossScoreStr && report.indExpectedSec1x > 0 && (
+                                                                        <div className="flex flex-col gap-1 mb-3 bg-white dark:bg-slate-900/50 p-2 rounded-lg border border-slate-100 dark:border-slate-700/50">
+                                                                            <div className="flex justify-between items-center text-[9px] font-bold">
+                                                                                <span className="text-slate-500 dark:text-slate-400">예상 시간(1배속)</span>
+                                                                                <span className="text-slate-700 dark:text-slate-300 font-mono">{min1x}분 {sec1x}초</span>
+                                                                            </div>
+                                                                            <div className="flex justify-between items-center text-[9px] font-bold">
+                                                                                <span className="text-slate-500 dark:text-slate-400">예상 시간(2배속)</span>
+                                                                                <span className="text-blue-500 dark:text-blue-400 font-mono">{min2x}분 {sec2x}초</span>
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+
                                                                     <div className="mt-auto pt-2 border-t border-slate-200 dark:border-slate-700/50 flex justify-between items-center">
                                                                         <span className="text-[10px] font-bold text-blue-500 dark:text-blue-400">{bossScoreStr ? '예상 점수' : '개인 격추'}</span>
                                                                         <span className="text-sm font-black font-mono text-blue-600 dark:text-blue-400 italic">
@@ -1148,7 +1263,8 @@
                                                                         </span>
                                                                     </div>
                                                                 </div>
-                                                            ))}
+                                                                );
+                                                            })}
                                                         </div>
                                                         {calcStrikeReport.individualReports.length === 0 && (
                                                             <div className="py-12 text-center text-slate-400 dark:text-slate-500 font-bold bg-slate-50 dark:bg-slate-800/50 rounded-xl">참여시킬 길드원들을 위 리스트에서 지정해 주세요.</div>
@@ -1206,7 +1322,7 @@
                                                                     </label>
                                                                     {isChecked && (
                                                                         <div className="mt-1">
-                                                                            <input type="number" min="1" className="w-full p-1.5 text-[10px] font-mono border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-center outline-none focus:border-emerald-500 text-slate-900 dark:text-white" placeholder="입력" value={existing.qty} onFocus={e=>e.target.select()} onChange={e => {
+                                                                            <input type="number" min="1" className="w-full p-1.5 text-[10px] font-mono border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-center outline-none focus:border-emerald-500 text-slate-900 dark:text-white" placeholder="값 입력(생략가능)" value={existing.qty} onFocus={e=>e.target.select()} onChange={e => {
                                                                                 const val = Math.max(1, Number(e.target.value) || 1);
                                                                                 setBasketItems(p => p.map(b => b.name === rName ? { ...b, qty: val } : b));
                                                                             }} />
@@ -1223,7 +1339,7 @@
                                                             <select className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:border-emerald-500 font-bold" value={equipType} onChange={e => setEquipType(e.target.value)}>
                                                                 <option value="모자">모자</option><option value="신발">신발</option><option value="장갑">장갑</option><option value="목도리">목도리</option>
                                                             </select>
-                                                            <input type="number" min="1" className="w-20 p-2 text-xs font-mono border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-center outline-none focus:border-emerald-500 text-slate-900 dark:text-white" placeholder="입력" value={equipQty} onFocus={e=>e.target.select()} onChange={e => setEquipQty(e.target.value)} />
+                                                            <input type="number" min="1" className="w-20 p-2 text-xs font-mono border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-center outline-none focus:border-emerald-500 text-slate-900 dark:text-white" placeholder="값 입력" value={equipQty} onFocus={e=>e.target.select()} onChange={e => setEquipQty(e.target.value)} />
                                                             <button onClick={() => {
                                                                 const val = Math.max(1, Number(equipQty) || 1);
                                                                 setCustomEquipments(p => [...p, { type: equipType, qty: val }]);
@@ -1319,7 +1435,7 @@
                                                             </div>
                                                         </div>
                                                         
-                                                        <div id="dist-result-card" ref={captureRef} className="p-6 md:p-8 rounded-[2rem] bg-slate-50 dark:bg-slate-900 border-2 border-emerald-500 shadow-2xl relative overflow-hidden mt-4">
+                                                        <div id="dist-result-card" ref={captureRef} className="p-6 md:p-8 rounded-[2rem] bg-white dark:bg-slate-900 border-2 border-emerald-500 shadow-2xl relative overflow-hidden mt-4">
                                                             <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-emerald-400 to-teal-500"></div>
                                                             <div className="flex justify-between items-center mb-6 border-b border-slate-200 dark:border-slate-700 pb-4">
                                                                 <div>
@@ -1390,8 +1506,7 @@
                                             </thead>
                                             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold">
                                                 {rankingData.weekly.map((m, i) => {
-                                                    const pStat = stats.playerMap[m.name] || { normalCount: 0, bossCount: 0, latestTime: 0 };
-                                                    const currentPoints = getMemberPoints(m);
+                                                    const pStat = stats.playerMap[m.name] || { points: 0, normalCount: 0, bossCount: 0, latestTime: 0 };
                                                     const status = rankingData.getPersonalStatus(m.name);
                                                     return (
                                                         <tr key={m.id} className={`hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors ${i === 0 ? 'bg-yellow-50/30 dark:bg-yellow-950/10' : ''}`}>
@@ -1410,7 +1525,7 @@
                                                                 </div>
                                                             </td>
                                                             <td className="px-3 py-3 text-right font-mono font-black text-blue-600 dark:text-blue-400 text-sm">
-                                                                {currentPoints.toLocaleString()} P
+                                                                {pStat.points.toLocaleString()} P
                                                             </td>
                                                             <td className="px-3 py-3 text-center hidden sm:table-cell text-slate-600 dark:text-slate-400 font-mono">
                                                                 {pStat.normalCount}회
