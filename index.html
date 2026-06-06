@@ -221,6 +221,65 @@
             const showAlert = (msg, type = 'success') => setUiAlert({ message: msg, type });
             const closeAlert = () => setUiAlert(null);
 
+            // ---------- 시간 입력 관련 개선 로직 시작 ----------
+            const handleTimeChange = (type, val) => {
+                const strVal = val.replace(/[^0-9]/g, '');
+                if (strVal === '') {
+                    if (type === 'min') setPlayMin('');
+                    else setPlaySec('');
+                    return;
+                }
+                const num = parseInt(strVal, 10);
+                if (type === 'min') setPlayMin(num);
+                else setPlaySec(num);
+            };
+
+            const handleTimeBlur = () => {
+                let currentMin = playMin === '' ? 0 : parseInt(playMin, 10);
+                let currentSec = playSec === '' ? 0 : parseInt(playSec, 10);
+
+                if (currentSec >= 60) {
+                    currentMin += Math.floor(currentSec / 60);
+                    currentSec = currentSec % 60;
+                }
+                setPlayMin(currentMin);
+                setPlaySec(currentSec);
+            };
+
+            const handleAddTime = (type, val) => {
+                let currentMin = playMin === '' ? 0 : parseInt(playMin, 10);
+                let currentSec = playSec === '' ? 0 : parseInt(playSec, 10);
+
+                if (type === 'min') {
+                    setPlayMin(Math.max(0, currentMin + val));
+                    setPlaySec(currentSec);
+                } else {
+                    let newSec = currentSec + val;
+                    let newMin = currentMin;
+                    
+                    if (newSec >= 60) {
+                        newMin += Math.floor(newSec / 60);
+                        newSec = newSec % 60;
+                    } else if (newSec < 0) {
+                        if (newMin > 0) {
+                            const borrow = Math.ceil(Math.abs(newSec) / 60);
+                            if (newMin >= borrow) {
+                                newMin -= borrow;
+                                newSec = 60 * borrow + newSec;
+                            } else {
+                                newMin = 0;
+                                newSec = 0;
+                            }
+                        } else {
+                            newSec = 0;
+                        }
+                    }
+                    setPlayMin(newMin);
+                    setPlaySec(newSec);
+                }
+            };
+            // ---------- 시간 입력 관련 개선 로직 끝 ----------
+
             const handleResetSession = () => {
                 setUiConfirm({ 
                     message: "길드원 정보를 초기화하고 이름 선택 화면으로 돌아가시겠습니까?", 
@@ -553,11 +612,14 @@
                 
                 try {
                     const batchGroupId = `grp_${new Date().getTime()}`;
+                    const finalMin = Number(playMin) || 0;
+                    const finalSec = Number(playSec) || 0;
+
                     for(let i=0; i<conquestNormalCount; i++){
-                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24'), { nickname, mob: '일반몹', playMin: Number(playMin), playSec: Number(playSec), groupId: batchGroupId, timestamp: serverTimestamp(), uid: user.uid });
+                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24'), { nickname, mob: '일반몹', playMin: finalMin, playSec: finalSec, groupId: batchGroupId, timestamp: serverTimestamp(), uid: user.uid });
                     }
                     for(let i=0; i<conquestBossCount; i++){
-                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24'), { nickname, mob: '보스', playMin: Number(playMin), playSec: Number(playSec), groupId: batchGroupId, timestamp: serverTimestamp(), uid: user.uid });
+                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24'), { nickname, mob: '보스', playMin: finalMin, playSec: finalSec, groupId: batchGroupId, timestamp: serverTimestamp(), uid: user.uid });
                     }
                     
                     if (member) {
@@ -984,111 +1046,151 @@
 
                         <main className="p-4 md:p-8">
                             {mainCategory === 'conquest' && (
-                                <div className="desktop-layout">
-                                    <aside className="space-y-6">
-                                        <div className="dashboard-card p-5 space-y-4">
-                                            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
-                                                <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2"><i className="fas fa-broadcast-tower text-red-500 animate-pulse"></i> 실시간 처치 기록</h3>
-                                                <button onClick={() => {setMainCategory('history'); setHistoryTab('conquest');}} className="text-[10px] text-blue-500 dark:text-blue-400 font-bold hover:underline">전체 보기</button>
-                                            </div>
-                                            <div className="space-y-2.5 max-h-[150px] overflow-y-auto no-scrollbar">
-                                                {logs.slice(0, 5).map((l, idx) => (
-                                                    <div key={idx} className="text-[10px] leading-relaxed border-b border-slate-50 dark:border-slate-800/50 pb-1.5 animate-fadeIn">
-                                                        <span className="text-blue-500 dark:text-blue-400 font-black">[{l.nickname}]</span> <span className="dark:text-slate-200">{l.mob} 성공</span> <span className="text-slate-400 ml-1">({l.playMin}m {l.playSec}s)</span>
-                                                    </div>
-                                                ))}
-                                                {logs.length === 0 && <p className="text-[10px] text-slate-400 text-center py-4">활동 기록 대기 중...</p>}
+                                <div className="flex flex-col gap-6">
+                                    {/* 누적 진행 시간 표시부 */}
+                                    <div className="dashboard-card p-4 md:p-5 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-l-[8px] border-blue-500 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 bg-white dark:bg-slate-800 rounded-full flex items-center justify-center text-blue-500 shadow-sm"><i className="fas fa-chart-bar"></i></div>
+                                            <div>
+                                                <h3 className="text-sm font-black text-slate-800 dark:text-slate-100">📊 현재 누적 진행 시간</h3>
+                                                <p className="text-[10px] text-slate-500 dark:text-slate-400">모든 회차의 균격 진행 시간을 합산한 결과입니다.</p>
                                             </div>
                                         </div>
-                                        
-                                        <form onSubmit={handleSubmitConquest} className="dashboard-card p-6 md:p-8 space-y-6 text-slate-900 dark:text-white border-l-[8px] border-blue-500">
-                                            <h2 className="text-lg uppercase italic border-b border-slate-100 pb-4 dark:border-slate-700 font-bold">균격 기록 다중 등록</h2>
+                                        <div className="text-2xl md:text-3xl font-black font-mono text-blue-600 dark:text-blue-400 italic">
+                                            {Math.floor((stats.playerMap[nickname]?.totalInputTimeSec || 0) / 60)}분 {String((stats.playerMap[nickname]?.totalInputTimeSec || 0) % 60).padStart(2, '0')}초
+                                        </div>
+                                    </div>
+
+                                    <div className="desktop-layout">
+                                        <aside className="space-y-6">
+                                            <div className="dashboard-card p-5 space-y-4">
+                                                <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
+                                                    <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2"><i className="fas fa-broadcast-tower text-red-500 animate-pulse"></i> 실시간 처치 기록</h3>
+                                                    <button onClick={() => {setMainCategory('history'); setHistoryTab('conquest');}} className="text-[10px] text-blue-500 dark:text-blue-400 font-bold hover:underline">전체 보기</button>
+                                                </div>
+                                                <div className="space-y-2.5 max-h-[150px] overflow-y-auto no-scrollbar">
+                                                    {logs.slice(0, 5).map((l, idx) => (
+                                                        <div key={idx} className="text-[10px] leading-relaxed border-b border-slate-50 dark:border-slate-800/50 pb-1.5 animate-fadeIn">
+                                                            <span className="text-blue-500 dark:text-blue-400 font-black">[{l.nickname}]</span> <span className="dark:text-slate-200">{l.mob} 성공</span> <span className="text-slate-400 ml-1">({l.playMin}m {l.playSec}s)</span>
+                                                        </div>
+                                                    ))}
+                                                    {logs.length === 0 && <p className="text-[10px] text-slate-400 text-center py-4">활동 기록 대기 중...</p>}
+                                                </div>
+                                            </div>
                                             
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 flex flex-col items-center gap-3">
-                                                    <span className="text-xs font-black text-slate-500 dark:text-slate-400">일반몹</span>
-                                                    <div className="flex items-center gap-3 bg-white dark:bg-slate-800 rounded-xl p-1 shadow-sm border border-slate-100 dark:border-slate-700">
-                                                        <button type="button" onClick={() => setConquestNormalCount(p => Math.max(0, p-1))} className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 font-black transition-colors">-</button>
-                                                        <span className="w-6 text-center font-mono font-black text-lg">{conquestNormalCount}</span>
-                                                        <button type="button" onClick={() => setConquestNormalCount(p => p+1)} className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-800/50 text-blue-600 dark:text-blue-400 font-black transition-colors">+</button>
-                                                    </div>
-                                                </div>
-                                                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 flex flex-col items-center gap-3">
-                                                    <span className="text-xs font-black text-red-500">보스</span>
-                                                    <div className="flex items-center gap-3 bg-white dark:bg-slate-800 rounded-xl p-1 shadow-sm border border-slate-100 dark:border-slate-700">
-                                                        <button type="button" onClick={() => setConquestBossCount(p => Math.max(0, p-1))} className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 font-black transition-colors">-</button>
-                                                        <span className="w-6 text-center font-mono font-black text-lg">{conquestBossCount}</span>
-                                                        <button type="button" onClick={() => setConquestBossCount(p => p+1)} className="w-8 h-8 rounded-lg bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-800/50 text-red-600 dark:text-red-400 font-black transition-colors">+</button>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div className="bg-slate-900 dark:bg-[#0B1220] rounded-[2rem] p-6 text-center border border-slate-800">
-                                                <span className="text-[10px] text-slate-400 block mb-2 font-bold">1회당 시간 (공통 반영)</span>
-                                                <div className="text-4xl md:text-5xl font-black text-white italic mb-6 font-mono">{String(playMin).padStart(2, '0')}<span className="text-blue-500 mx-1.5">:</span>{String(playSec).padStart(2, '0')}</div>
-                                                <div className="grid grid-cols-3 gap-2">
-                                                    {[1, 10, 1].map((v, i) => (
-                                                        <button key={`plus${i}`} type="button" onClick={() => setPlayMin(p => i===0 ? p+v : p)} className="bg-white/10 hover:bg-white/20 transition-colors p-2.5 rounded-lg text-[10px] font-black text-white">+{v}{i===0?'분':'초'}</button>
-                                                    ))}
-                                                    {[-1, -10, -1].map((v, i) => (
-                                                        <button key={`minus${i}`} type="button" onClick={() => setPlayMin(p => i===0 ? Math.max(0, p+v) : p)} className="bg-red-500/10 hover:bg-red-500/20 transition-colors p-2.5 rounded-lg text-[10px] font-black text-red-400">{-v}{i===0?'분':'초'}</button>
-                                                    ))}
-                                                </div>
-                                            </div>
-
-                                            <div className="flex flex-col gap-3">
-                                                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-6 rounded-2xl font-black text-xl shadow-lg shadow-blue-500/20 transition-all active:scale-95 uppercase italic border-b-4 border-blue-800">총 {conquestNormalCount + conquestBossCount}건 제출 승인</button>
-                                                <button type="button" onClick={handleUndoLastConquest} className="w-full bg-slate-100 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-900/30 text-red-500 border border-slate-200 dark:border-slate-700 py-3.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all">마지막 균격 기록 취소</button>
-                                            </div>
-                                        </form>
-                                    </aside>
-
-                                    <section className="space-y-6 mt-8 lg:mt-0">
-                                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 px-2">
-                                            <h3 className="font-black text-lg italic uppercase text-blue-500 shrink-0">길드원 기록 현황</h3>
-                                            <div className="flex gap-1.5 bg-slate-200 dark:bg-slate-800 p-1 rounded-xl w-full md:w-auto overflow-x-auto no-scrollbar">
-                                                <button onClick={() => setConquestFilter('timeSort')} className={`whitespace-nowrap px-4 py-1.5 rounded-lg text-[10px] font-black transition-all ${conquestFilter === 'timeSort' ? 'bg-white dark:bg-slate-600 shadow-sm text-emerald-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700'}`}>남은시간 순</button>
-                                                <button onClick={() => setConquestFilter('all')} className={`whitespace-nowrap px-4 py-1.5 rounded-lg text-[10px] font-black transition-all ${conquestFilter === 'all' ? 'bg-white dark:bg-slate-600 shadow-sm text-blue-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700'}`}>전체</button>
-                                                <button onClick={() => setConquestFilter('inactive')} className={`whitespace-nowrap px-4 py-1.5 rounded-lg text-[10px] font-black transition-all ${conquestFilter === 'inactive' ? 'bg-white dark:bg-slate-600 shadow-sm text-red-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700'}`}>미참여</button>
-                                            </div>
-                                        </div>
-                                        <div className="agent-grid">
-                                            {sortedConquestMembers.map(mDoc => {
-                                                const st = stats.playerMap[mDoc.name] || { swords: 0, totalInputTimeSec: 0 };
-                                                const usedSwordsCount = mDoc.rankingNormal !== undefined ? (mDoc.rankingNormal + (mDoc.rankingBoss||0)) : (st.swords || 0);
-                                                const totalBudgetSec = TOTAL_RESOURCES * BASE_TIME_PER_SWORD * 60; 
-                                                const remainingSec = Math.max(0, totalBudgetSec - st.totalInputTimeSec);
-                                                const isInactive = usedSwordsCount === 0;
+                                            <form onSubmit={handleSubmitConquest} className="dashboard-card p-6 md:p-8 space-y-6 text-slate-900 dark:text-white border-l-[8px] border-blue-500">
+                                                <h2 className="text-lg uppercase italic border-b border-slate-100 pb-4 dark:border-slate-700 font-bold">균격 기록 다중 등록</h2>
                                                 
-                                                return (
-                                                    <div key={mDoc.id} className={`dashboard-card p-5 md:p-6 border-l-[6px] ${!isInactive ? 'border-l-blue-500 shadow-md' : 'border-l-slate-300 dark:border-l-slate-700 bg-slate-50/50 dark:bg-slate-800/40'} hover:translate-y-[-4px] transition-transform`}>
-                                                        <div className="flex flex-col mb-4 gap-1.5 min-w-0">
-                                                            <div className="flex justify-between items-start gap-2">
-                                                                <span className={`text-lg font-black break-words italic ${!isInactive ? 'text-slate-900 dark:text-slate-100' : 'text-slate-600 dark:text-slate-300'}`}>{mDoc.name}</span>
-                                                                <span className={`text-[8px] md:text-[9px] font-black px-2 py-0.5 rounded-full shadow-sm whitespace-nowrap shrink-0 ${isInactive ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500' : (TOTAL_RESOURCES - usedSwordsCount) <= 0 ? 'bg-red-50 dark:bg-red-950/30 text-red-500' : 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400'}`}>
-                                                                    {isInactive ? '미참여' : `잔여: ${TOTAL_RESOURCES - usedSwordsCount}`}
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 flex flex-col items-center gap-3">
+                                                        <span className="text-xs font-black text-slate-500 dark:text-slate-400">일반몹</span>
+                                                        <div className="flex items-center gap-3 bg-white dark:bg-slate-800 rounded-xl p-1 shadow-sm border border-slate-100 dark:border-slate-700">
+                                                            <button type="button" onClick={() => setConquestNormalCount(p => Math.max(0, p-1))} className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 font-black transition-colors">-</button>
+                                                            <span className="w-6 text-center font-mono font-black text-lg">{conquestNormalCount}</span>
+                                                            <button type="button" onClick={() => setConquestNormalCount(p => p+1)} className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-800/50 text-blue-600 dark:text-blue-400 font-black transition-colors">+</button>
+                                                        </div>
+                                                    </div>
+                                                    <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 flex flex-col items-center gap-3">
+                                                        <span className="text-xs font-black text-red-500">보스</span>
+                                                        <div className="flex items-center gap-3 bg-white dark:bg-slate-800 rounded-xl p-1 shadow-sm border border-slate-100 dark:border-slate-700">
+                                                            <button type="button" onClick={() => setConquestBossCount(p => Math.max(0, p-1))} className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 font-black transition-colors">-</button>
+                                                            <span className="w-6 text-center font-mono font-black text-lg">{conquestBossCount}</span>
+                                                            <button type="button" onClick={() => setConquestBossCount(p => p+1)} className="w-8 h-8 rounded-lg bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-800/50 text-red-600 dark:text-red-400 font-black transition-colors">+</button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="bg-slate-900 dark:bg-[#0B1220] rounded-[2rem] p-6 text-center border border-slate-800">
+                                                    <span className="text-[10px] text-slate-400 block mb-2 font-bold">1회당 시간 (공통 반영)</span>
+                                                    <div className="flex justify-center items-center text-4xl md:text-5xl font-black text-white italic mb-6 font-mono">
+                                                        <input 
+                                                            type="number" 
+                                                            min="0" 
+                                                            className="w-20 md:w-24 bg-transparent border-b-2 border-white/20 text-center outline-none focus:border-blue-500 transition-colors placeholder:text-white/20" 
+                                                            value={playMin === '' ? '' : String(playMin).padStart(2, '0')} 
+                                                            onChange={e => handleTimeChange('min', e.target.value)} 
+                                                            onBlur={handleTimeBlur}
+                                                            onFocus={e => e.target.select()} 
+                                                        />
+                                                        <span className="text-blue-500 mx-1.5">:</span>
+                                                        <input 
+                                                            type="number" 
+                                                            min="0" 
+                                                            className="w-20 md:w-24 bg-transparent border-b-2 border-white/20 text-center outline-none focus:border-blue-500 transition-colors placeholder:text-white/20" 
+                                                            value={playSec === '' ? '' : String(playSec).padStart(2, '0')} 
+                                                            onChange={e => handleTimeChange('sec', e.target.value)} 
+                                                            onBlur={handleTimeBlur}
+                                                            onFocus={e => e.target.select()} 
+                                                        />
+                                                    </div>
+                                                    <div className="grid grid-cols-3 gap-2">
+                                                        {[{v: 1, t: 'min', label: '분'}, {v: 10, t: 'sec', label: '초'}, {v: 1, t: 'sec', label: '초'}].map((item, i) => (
+                                                            <button key={`plus${i}`} type="button" onClick={() => handleAddTime(item.t, item.v)} className="bg-white/10 hover:bg-white/20 transition-colors p-2.5 rounded-lg text-[10px] font-black text-white">
+                                                                +{item.v}{item.label}
+                                                            </button>
+                                                        ))}
+                                                        {[{v: 1, t: 'min', label: '분'}, {v: 10, t: 'sec', label: '초'}, {v: 1, t: 'sec', label: '초'}].map((item, i) => (
+                                                            <button key={`minus${i}`} type="button" onClick={() => handleAddTime(item.t, -item.v)} className="bg-red-500/10 hover:bg-red-500/20 transition-colors p-2.5 rounded-lg text-[10px] font-black text-red-400">
+                                                                -{item.v}{item.label}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex flex-col gap-3">
+                                                    <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-6 rounded-2xl font-black text-xl shadow-lg shadow-blue-500/20 transition-all active:scale-95 uppercase italic border-b-4 border-blue-800">총 {conquestNormalCount + conquestBossCount}건 제출 승인</button>
+                                                    <button type="button" onClick={handleUndoLastConquest} className="w-full bg-slate-100 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-900/30 text-red-500 border border-slate-200 dark:border-slate-700 py-3.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all">마지막 균격 기록 취소</button>
+                                                </div>
+                                            </form>
+                                        </aside>
+
+                                        <section className="space-y-6 mt-8 lg:mt-0">
+                                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 px-2">
+                                                <h3 className="font-black text-lg italic uppercase text-blue-500 shrink-0">길드원 기록 현황</h3>
+                                                <div className="flex gap-1.5 bg-slate-200 dark:bg-slate-800 p-1 rounded-xl w-full md:w-auto overflow-x-auto no-scrollbar">
+                                                    <button onClick={() => setConquestFilter('timeSort')} className={`whitespace-nowrap px-4 py-1.5 rounded-lg text-[10px] font-black transition-all ${conquestFilter === 'timeSort' ? 'bg-white dark:bg-slate-600 shadow-sm text-emerald-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700'}`}>남은시간 순</button>
+                                                    <button onClick={() => setConquestFilter('all')} className={`whitespace-nowrap px-4 py-1.5 rounded-lg text-[10px] font-black transition-all ${conquestFilter === 'all' ? 'bg-white dark:bg-slate-600 shadow-sm text-blue-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700'}`}>전체</button>
+                                                    <button onClick={() => setConquestFilter('inactive')} className={`whitespace-nowrap px-4 py-1.5 rounded-lg text-[10px] font-black transition-all ${conquestFilter === 'inactive' ? 'bg-white dark:bg-slate-600 shadow-sm text-red-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700'}`}>미참여</button>
+                                                </div>
+                                            </div>
+                                            <div className="agent-grid">
+                                                {sortedConquestMembers.map(mDoc => {
+                                                    const st = stats.playerMap[mDoc.name] || { swords: 0, totalInputTimeSec: 0 };
+                                                    const usedSwordsCount = mDoc.rankingNormal !== undefined ? (mDoc.rankingNormal + (mDoc.rankingBoss||0)) : (st.swords || 0);
+                                                    const totalBudgetSec = TOTAL_RESOURCES * BASE_TIME_PER_SWORD * 60; 
+                                                    const remainingSec = Math.max(0, totalBudgetSec - st.totalInputTimeSec);
+                                                    const isInactive = usedSwordsCount === 0;
+                                                    
+                                                    return (
+                                                        <div key={mDoc.id} className={`dashboard-card p-5 md:p-6 border-l-[6px] ${!isInactive ? 'border-l-blue-500 shadow-md' : 'border-l-slate-300 dark:border-l-slate-700 bg-slate-50/50 dark:bg-slate-800/40'} hover:translate-y-[-4px] transition-transform`}>
+                                                            <div className="flex flex-col mb-4 gap-1.5 min-w-0">
+                                                                <div className="flex justify-between items-start gap-2">
+                                                                    <span className={`text-lg font-black break-words italic ${!isInactive ? 'text-slate-900 dark:text-slate-100' : 'text-slate-600 dark:text-slate-300'}`}>{mDoc.name}</span>
+                                                                    <span className={`text-[8px] md:text-[9px] font-black px-2 py-0.5 rounded-full shadow-sm whitespace-nowrap shrink-0 ${isInactive ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500' : (TOTAL_RESOURCES - usedSwordsCount) <= 0 ? 'bg-red-50 dark:bg-red-950/30 text-red-500' : 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400'}`}>
+                                                                        {isInactive ? '미참여' : `잔여: ${TOTAL_RESOURCES - usedSwordsCount}`}
+                                                                    </span>
+                                                                </div>
+                                                                <span className={`text-[9px] font-black italic tracking-widest break-words ${!isInactive ? 'text-blue-500 dark:text-blue-300' : 'text-slate-400 dark:text-slate-400'}`}>
+                                                                    {rankingData.getPersonalStatus(mDoc.name).currentTitle.name}
                                                                 </span>
                                                             </div>
-                                                            <span className={`text-[9px] font-black italic tracking-widest break-words ${!isInactive ? 'text-blue-500 dark:text-blue-300' : 'text-slate-400 dark:text-slate-400'}`}>
-                                                                {rankingData.getPersonalStatus(mDoc.name).currentTitle.name}
-                                                            </span>
-                                                        </div>
-                                                        <div className="space-y-4">
-                                                            <div className="relative h-2 w-full bg-slate-100 dark:bg-black/30 rounded-full overflow-hidden">
-                                                                <div className={`h-full ${!isInactive ? 'bg-gradient-to-r from-blue-600 to-cyan-400' : 'bg-slate-300 dark:bg-slate-700'} transition-all duration-1000`} style={{ width: `${(usedSwordsCount / TOTAL_RESOURCES) * 100}%` }}></div>
-                                                            </div>
-                                                            <div className={`flex flex-col gap-1 text-[10px] md:text-[11px] font-black ${!isInactive ? 'text-slate-500 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500'}`}>
-                                                                <div className="flex justify-between"><span>칼 사용</span><span className={!isInactive ? 'text-slate-900 dark:text-slate-100 italic' : ''}>{(usedSwordsCount)} / {TOTAL_RESOURCES}</span></div>
-                                                                <div className={`flex justify-between border-t pt-2 ${!isInactive ? 'text-emerald-500 border-slate-50 dark:border-slate-800' : 'text-slate-400 dark:text-slate-500 border-slate-100 dark:border-slate-800/40'}`}>
-                                                                    <span>남은 시간</span><span className={`italic font-mono ${!isInactive ? 'text-blue-600 dark:text-blue-400' : ''}`}>{Math.floor(remainingSec / 60)}분 {remainingSec % 60}초</span>
+                                                            <div className="space-y-4">
+                                                                <div className="relative h-2 w-full bg-slate-100 dark:bg-black/30 rounded-full overflow-hidden">
+                                                                    <div className={`h-full ${!isInactive ? 'bg-gradient-to-r from-blue-600 to-cyan-400' : 'bg-slate-300 dark:bg-slate-700'} transition-all duration-1000`} style={{ width: `${(usedSwordsCount / TOTAL_RESOURCES) * 100}%` }}></div>
+                                                                </div>
+                                                                <div className={`flex flex-col gap-1 text-[10px] md:text-[11px] font-black ${!isInactive ? 'text-slate-500 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500'}`}>
+                                                                    <div className="flex justify-between"><span>칼 사용</span><span className={!isInactive ? 'text-slate-900 dark:text-slate-100 italic' : ''}>{(usedSwordsCount)} / {TOTAL_RESOURCES}</span></div>
+                                                                    <div className={`flex justify-between border-t pt-2 ${!isInactive ? 'text-emerald-500 border-slate-50 dark:border-slate-800' : 'text-slate-400 dark:text-slate-500 border-slate-100 dark:border-slate-800/40'}`}>
+                                                                        <span>남은 시간</span><span className={`italic font-mono ${!isInactive ? 'text-blue-600 dark:text-blue-400' : ''}`}>{Math.floor(remainingSec / 60)}분 {remainingSec % 60}초</span>
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                         </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    </section>
+                                                    );
+                                                })}
+                                            </div>
+                                        </section>
+                                    </div>
                                 </div>
                             )}
 
