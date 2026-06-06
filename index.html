@@ -612,14 +612,26 @@
                 
                 try {
                     const batchGroupId = `grp_${new Date().getTime()}`;
-                    const finalMin = Number(playMin) || 0;
-                    const finalSec = Number(playSec) || 0;
+                    const totalSeconds = (Number(playMin) || 0) * 60 + (Number(playSec) || 0);
+                    
+                    const baseSecPerSword = Math.floor(totalSeconds / totalCount);
+                    let remainderSec = totalSeconds % totalCount;
+
+                    const createLogParams = (mobType) => {
+                        const secForThisSword = baseSecPerSword + (remainderSec > 0 ? 1 : 0);
+                        if (remainderSec > 0) remainderSec--;
+                        
+                        const pMin = Math.floor(secForThisSword / 60);
+                        const pSec = secForThisSword % 60;
+                        
+                        return { nickname, mob: mobType, playMin: pMin, playSec: pSec, groupId: batchGroupId, timestamp: serverTimestamp(), uid: user.uid };
+                    };
 
                     for(let i=0; i<conquestNormalCount; i++){
-                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24'), { nickname, mob: '일반몹', playMin: finalMin, playSec: finalSec, groupId: batchGroupId, timestamp: serverTimestamp(), uid: user.uid });
+                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24'), createLogParams('일반몹'));
                     }
                     for(let i=0; i<conquestBossCount; i++){
-                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24'), { nickname, mob: '보스', playMin: finalMin, playSec: finalSec, groupId: batchGroupId, timestamp: serverTimestamp(), uid: user.uid });
+                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24'), createLogParams('보스'));
                     }
                     
                     if (member) {
@@ -1101,7 +1113,7 @@
                                                 </div>
 
                                                 <div className="bg-slate-900 dark:bg-[#0B1220] rounded-[2rem] p-6 text-center border border-slate-800">
-                                                    <span className="text-[10px] text-slate-400 block mb-2 font-bold">1회당 시간 (공통 반영)</span>
+                                                    <span className="text-[10px] text-slate-400 block mb-2 font-bold">총 소요 시간 (합산 분배)</span>
                                                     <div className="flex justify-center items-center text-4xl md:text-5xl font-black text-white italic mb-6 font-mono">
                                                         <input 
                                                             type="number" 
@@ -1178,10 +1190,18 @@
                                                                 <div className="relative h-2 w-full bg-slate-100 dark:bg-black/30 rounded-full overflow-hidden">
                                                                     <div className={`h-full ${!isInactive ? 'bg-gradient-to-r from-blue-600 to-cyan-400' : 'bg-slate-300 dark:bg-slate-700'} transition-all duration-1000`} style={{ width: `${(usedSwordsCount / TOTAL_RESOURCES) * 100}%` }}></div>
                                                                 </div>
-                                                                <div className={`flex flex-col gap-1 text-[10px] md:text-[11px] font-black ${!isInactive ? 'text-slate-500 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500'}`}>
-                                                                    <div className="flex justify-between"><span>칼 사용</span><span className={!isInactive ? 'text-slate-900 dark:text-slate-100 italic' : ''}>{(usedSwordsCount)} / {TOTAL_RESOURCES}</span></div>
-                                                                    <div className={`flex justify-between border-t pt-2 ${!isInactive ? 'text-emerald-500 border-slate-50 dark:border-slate-800' : 'text-slate-400 dark:text-slate-500 border-slate-100 dark:border-slate-800/40'}`}>
-                                                                        <span>남은 시간</span><span className={`italic font-mono ${!isInactive ? 'text-blue-600 dark:text-blue-400' : ''}`}>{Math.floor(remainingSec / 60)}분 {remainingSec % 60}초</span>
+                                                                <div className={`flex flex-col gap-1.5 text-[10px] md:text-[11px] font-black ${!isInactive ? 'text-slate-500 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500'}`}>
+                                                                    <div className="flex justify-between items-center">
+                                                                        <span>남은 칼</span>
+                                                                        <span className={!isInactive ? 'text-slate-900 dark:text-slate-100 italic font-black text-sm' : ''}>
+                                                                            {TOTAL_RESOURCES - usedSwordsCount}개
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className={`flex justify-between items-center border-t pt-2 ${!isInactive ? 'text-emerald-500 border-slate-50 dark:border-slate-800' : 'text-slate-400 dark:text-slate-500 border-slate-100 dark:border-slate-800/40'}`}>
+                                                                        <span>예상 남은 시간</span>
+                                                                        <span className={`italic font-mono font-black ${!isInactive ? 'text-blue-600 dark:text-blue-400' : ''}`}>
+                                                                            {Math.floor(remainingSec / 60)}분 {remainingSec % 60 > 0 ? `${remainingSec % 60}초` : ''}
+                                                                        </span>
                                                                     </div>
                                                                 </div>
                                                             </div>
