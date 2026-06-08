@@ -143,17 +143,16 @@
             const [nickname, setNickname] = useState(localStorage.getItem('cat_hero_nickname') || '');
             const [isNameSet, setIsNameSet] = useState(!!localStorage.getItem('cat_hero_nickname'));
             const [isAdminMode, setIsAdminMode] = useState(false);
-            const [isSuperAdmin, setIsSuperAdmin] = useState(sessionStorage.getItem('isSuperAdmin') === 'true');
             const [adminPass, setAdminPass] = useState("");
             const [showAdminEntry, setShowAdminEntry] = useState(false);
             
-            // 통합 테마 설정 ('light', 'dark', 'system')
+            // 통합 테마 설정
             const [themeMode, setThemeMode] = useState(localStorage.getItem('cat_hero_theme') || 'system');
             
             // 줌(확대/축소) 레벨 설정
             const [zoomIndex, setZoomIndex] = useState(() => {
                 const saved = localStorage.getItem('cat_hero_zoom');
-                return saved !== null ? Number(saved) : 3; // 기본값 100% (index 3)
+                return saved !== null ? Number(saved) : 3;
             });
 
             const [mainCategory, setMainCategory] = useState('conquest'); 
@@ -190,17 +189,26 @@
             const [basketItems, setBasketItems] = useState([]);
             const [customEquipments, setCustomEquipments] = useState([]);
             const [equipType, setEquipType] = useState('모자');
+            const [equipGrade, setEquipGrade] = useState('흰색'); 
             const [equipQty, setEquipQty] = useState('');
             
             const [distResult, setDistResult] = useState(null);
+            const [isDistSaved, setIsDistSaved] = useState(false);
             const captureRef = useRef(null);
             const ratioCaptureRef = useRef(null); 
 
             // 수동 이력 추가 관련 상태
-            const [manualLootDate, setManualLootDate] = useState('');
-            const [manualLootItem, setManualLootItem] = useState('룬 소환서');
+            const [manualLootItem, setManualLootItem] = useState('');
             const [manualLootWinner, setManualLootWinner] = useState('');
             const [manualLootQty, setManualLootQty] = useState(1);
+            const [manualLootMemo, setManualLootMemo] = useState('');
+            const [manualLootGrade, setManualLootGrade] = useState('흰색'); 
+            const [manualEquipType, setManualEquipType] = useState('모자');
+            const [showManualLootForm, setShowManualLootForm] = useState(false);
+            
+            const [lootSearch, setLootSearch] = useState('');
+            const [lootSort, setLootSort] = useState('desc');
+            const [editLootItem, setEditLootItem] = useState(null);
 
             // 분배 애니메이션 연출 상태
             const [isDistAnimating, setIsDistAnimating] = useState(false);
@@ -221,7 +229,12 @@
             const showAlert = (msg, type = 'success') => setUiAlert({ message: msg, type });
             const closeAlert = () => setUiAlert(null);
 
-            // ---------- 시간 입력 관련 개선 로직 시작 ----------
+            // 권한 체크: 총무(Manager) 또는 관리자(Admin) 여부
+            const currentUserMember = members.find(m => m.name === nickname);
+            const isManager = currentUserMember?.isManager === true;
+            const canEditLoot = isAdminMode || isManager;
+
+            // 시간 입력 로직
             const handleTimeChange = (type, val) => {
                 const strVal = val.replace(/[^0-9]/g, '');
                 if (strVal === '') {
@@ -278,12 +291,11 @@
                     setPlaySec(newSec);
                 }
             };
-            // ---------- 시간 입력 관련 개선 로직 끝 ----------
 
             const handleResetSession = () => {
                 setUiConfirm({ 
                     message: "길드원 정보를 초기화하고 이름 선택 화면으로 돌아가시겠습니까?", 
-                    onConfirm: () => { 
+                    onConfirm: (isChecked) => { 
                         localStorage.removeItem('cat_hero_nickname'); 
                         setNickname(''); 
                         setIsNameSet(false); 
@@ -324,7 +336,7 @@
             const handleAdminUpdateField = async (id, field, value) => {
                 try {
                     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', id), { [field]: value });
-                    showAlert("저장되었습니다.");
+                    showAlert("권한/정보가 안전하게 저장되었습니다.");
                 } catch (e) {
                     showAlert("저장에 실패했습니다.", "error");
                 }
@@ -397,12 +409,12 @@
                 setUiConfirm({
                     message: "현재 분배 결과를 초기화하시겠습니까?\n(선택된 보상 목록도 함께 초기화됩니다)",
                     checkboxLabel: "참여 길드원 목록도 함께 초기화",
-                    onConfirm: (clearMembers) => {
+                    onConfirm: (isChecked) => {
                         setDistResult(null);
                         setBasketItems([]);
                         setCustomEquipments([]);
                         setIsDistAnimating(false);
-                        if (clearMembers) {
+                        if (isChecked) {
                             setSelectedCalcMembers([]);
                         }
                         showAlert("분배 결과가 초기화되었습니다.");
@@ -410,7 +422,7 @@
                 });
             };
 
-            // 테마 변경 Effect
+            // 테마 및 줌 Effect
             useEffect(() => {
                 const applyTheme = () => {
                     let isDark = false;
@@ -422,10 +434,8 @@
                     if (isDark) document.documentElement.classList.add('dark');
                     else document.documentElement.classList.remove('dark');
                 };
-                
                 applyTheme();
                 localStorage.setItem('cat_hero_theme', themeMode);
-                
                 if (themeMode === 'system') {
                     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
                     const listener = () => applyTheme();
@@ -434,7 +444,6 @@
                 }
             }, [themeMode]);
 
-            // 확대/축소 Effect
             useEffect(() => {
                 const scale = ZOOM_LEVELS[zoomIndex] / 100;
                 document.documentElement.style.fontSize = `${16 * scale}px`;
@@ -445,6 +454,7 @@
                 localStorage.setItem('cat_hero_enable_anim', enableAnimation);
             }, [enableAnimation]);
 
+            // 파이어베이스 데이터 구독
             useEffect(() => {
                 const initAuth = async () => { try { await signInAnonymously(auth); } catch (e) { console.error(e); } };
                 initAuth();
@@ -616,6 +626,7 @@
                     
                     const baseSecPerSword = Math.floor(totalSeconds / totalCount);
                     let remainderSec = totalSeconds % totalCount;
+                    const isMulti = totalCount > 1;
 
                     const createLogParams = (mobType) => {
                         const secForThisSword = baseSecPerSword + (remainderSec > 0 ? 1 : 0);
@@ -624,7 +635,7 @@
                         const pMin = Math.floor(secForThisSword / 60);
                         const pSec = secForThisSword % 60;
                         
-                        return { nickname, mob: mobType, playMin: pMin, playSec: pSec, groupId: batchGroupId, timestamp: serverTimestamp(), uid: user.uid };
+                        return { nickname, mob: mobType, playMin: pMin, playSec: pSec, groupId: batchGroupId, timestamp: serverTimestamp(), uid: user.uid, isMulti };
                     };
 
                     for(let i=0; i<conquestNormalCount; i++){
@@ -694,17 +705,100 @@
             const handleAddManualLoot = async (e) => {
                 e.preventDefault();
                 if(!manualLootWinner) return showAlert("당첨될 길드원을 지정해주세요.", "error");
+                if(!manualLootItem) return showAlert("보상 종류를 선택해주세요.", "error");
                 try {
-                    const ts = manualLootDate ? new Date(manualLootDate) : new Date();
+                    const ts = new Date(); // 항상 현재 시간으로 저장
+                    let finalItemStr = manualLootItem;
+                    if (manualLootItem === '장비') {
+                        finalItemStr = `[${manualLootGrade}] 장비(${manualEquipType})`;
+                    }
+                    
                     await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'loot_history_v24'), {
                         distType: '수동 이력 추가',
-                        list: [{ itemStr: `${manualLootItem} x${manualLootQty}`, winner: manualLootWinner }],
+                        list: [{ itemStr: `${finalItemStr} x${manualLootQty}`, winner: manualLootWinner }],
+                        memo: manualLootMemo,
                         timestamp: ts
                     });
                     showAlert("수동 이력이 정상 추가되었습니다.");
                     setManualLootQty(1);
                     setManualLootWinner('');
+                    setManualLootItem('');
+                    setManualLootGrade('흰색');
+                    setManualEquipType('모자');
+                    setManualLootMemo('');
+                    setShowManualLootForm(false);
                 } catch(err) { showAlert("저장 실패", "error"); }
+            };
+
+            const flatLootLogs = useMemo(() => {
+                let result = [];
+                lootLogs.forEach(doc => {
+                    const ts = doc.timestamp?.seconds ? doc.timestamp.seconds * 1000 : (doc.timestamp ? new Date(doc.timestamp).getTime() : Date.now());
+                    if(doc.list && Array.isArray(doc.list)) {
+                        doc.list.forEach((item, idx) => {
+                            result.push({
+                                id: `${doc.id}_${idx}`,
+                                docId: doc.id,
+                                idx: idx,
+                                distType: doc.distType,
+                                memo: doc.memo || '',
+                                timestamp: ts,
+                                ...item
+                            });
+                        });
+                    }
+                });
+                
+                if (lootSearch) {
+                    const sl = lootSearch.toLowerCase();
+                    result = result.filter(r => (r.winner && r.winner.toLowerCase().includes(sl)) || (r.itemStr && r.itemStr.toLowerCase().includes(sl)) || (r.distType && r.distType.toLowerCase().includes(sl)));
+                }
+                
+                return result.sort((a,b) => lootSort === 'desc' ? b.timestamp - a.timestamp : a.timestamp - b.timestamp);
+            }, [lootLogs, lootSearch, lootSort]);
+
+            const handleDeleteLootItem = async (item) => {
+                setUiConfirm({
+                    message: "이 분배 기록을 삭제하시겠습니까?",
+                    onConfirm: async (isChecked) => {
+                        try {
+                            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'loot_history_v24', item.docId);
+                            const parentDoc = lootLogs.find(d => d.id === item.docId);
+                            if (parentDoc) {
+                                const newList = parentDoc.list.filter((_, idx) => idx !== item.idx);
+                                if (newList.length === 0) {
+                                    await deleteDoc(docRef);
+                                } else {
+                                    await updateDoc(docRef, { list: newList });
+                                }
+                                showAlert("기록이 삭제되었습니다.");
+                            }
+                        } catch (e) {
+                            showAlert("삭제 실패", "error");
+                        }
+                    }
+                });
+            };
+
+            const handleUpdateLootItem = async (e) => {
+                e.preventDefault();
+                try {
+                    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'loot_history_v24', editLootItem.docId);
+                    const parentDoc = lootLogs.find(d => d.id === editLootItem.docId);
+                    if (parentDoc) {
+                        const newList = [...parentDoc.list];
+                        newList[editLootItem.idx] = { 
+                            ...newList[editLootItem.idx], 
+                            winner: editLootItem.winner, 
+                            itemStr: editLootItem.itemStr 
+                        };
+                        await updateDoc(docRef, { list: newList });
+                        showAlert("수정되었습니다.");
+                        setEditLootItem(null);
+                    }
+                } catch (e) {
+                    showAlert("수정 실패", "error");
+                }
             };
 
             const calcStrikeReport = useMemo(() => {
@@ -764,7 +858,8 @@
                     customEquipments.forEach(eq => {
                         for(let i=0; i<eq.qty; i++){
                             const winner = pNames[Math.floor(Math.random() * pNames.length)];
-                            resultArr.push({ itemStr: `장비(${eq.type})`, winner, isEquip: true, isRandom: true });
+                            const finalItemName = `[${eq.grade}] 장비(${eq.type})`;
+                            resultArr.push({ itemStr: finalItemName, winner, isEquip: true, isRandom: true });
                         }
                     });
 
@@ -777,7 +872,7 @@
                     
                     let allItems = [];
                     basketItems.forEach(b => { allItems.push({ name: b.name, qty: b.qty, isEquip: b.name === '장비' }); });
-                    customEquipments.forEach(eq => { allItems.push({ name: `장비(${eq.type})`, qty: eq.qty, isEquip: true }); });
+                    customEquipments.forEach(eq => { allItems.push({ name: `[${eq.grade}] 장비(${eq.type})`, qty: eq.qty, isEquip: true }); });
 
                     allItems.forEach(item => {
                         let totalQty = item.qty;
@@ -802,6 +897,7 @@
 
                 const finalResult = { type: type === 'random' ? '무작위 랜덤 분배' : '기여도 기반 분배', list: resultArr };
 
+                setIsDistSaved(false);
                 if (enableAnimation) {
                     setDistResult(null);
                     setTempDistList(resultArr);
@@ -809,7 +905,6 @@
                     setSlotDisplayNames(resultArr.map(() => pNames[Math.floor(Math.random() * pNames.length)]));
                 } else {
                     setDistResult(finalResult);
-                    saveDistributionHistory(finalResult);
                 }
             };
 
@@ -827,7 +922,6 @@
                         setIsDistAnimating(false);
                         const finalResult = { type: tempDistList[0]?.isRandom ? '무작위 랜덤 분배' : '기여도 기반 분배', list: tempDistList };
                         setDistResult(finalResult);
-                        saveDistributionHistory(finalResult);
                     }, 2500); 
                 }
                 return () => { clearInterval(interval); clearTimeout(timeout); };
@@ -837,7 +931,6 @@
                 setIsDistAnimating(false);
                 const finalResult = { type: tempDistList[0]?.isRandom ? '무작위 랜덤 분배' : '기여도 기반 분배', list: tempDistList };
                 setDistResult(finalResult);
-                saveDistributionHistory(finalResult);
             };
 
             const groupedDistResult = useMemo(() => {
@@ -928,10 +1021,18 @@
                                                                 <i className={`fas fa-star ${isFav ? 'text-yellow-400' : 'text-slate-300 dark:text-slate-600'}`}></i>
                                                             </button>
                                                             <div>
-                                                                <span className="font-black text-blue-600 dark:text-blue-400 text-base">{m.name}</span>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="font-black text-blue-600 dark:text-blue-400 text-base">{m.name}</span>
+                                                                    {m.isManager && <span className="text-[8px] bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400 px-1.5 py-0.5 rounded italic font-black shadow-sm">총무</span>}
+                                                                </div>
                                                                 <div className="text-[10px] text-slate-500 flex items-center gap-3 mt-1 font-mono">
                                                                     <span>참여: {m.rankingNormal !== undefined ? (m.rankingNormal + (m.rankingBoss||0)) : (mStat.swords || 0)}회</span>
                                                                     <span>최근: {m.latestTime?.seconds ? new Date(m.latestTime.seconds * 1000).toLocaleDateString() : (mStat.latestTime ? new Date(mStat.latestTime * 1000).toLocaleDateString() : '없음')}</span>
+                                                                    <button 
+                                                                        onClick={() => handleAdminUpdateField(m.id, 'isManager', !m.isManager)}
+                                                                        className={`ml-1 px-2 py-0.5 rounded text-[9px] font-black transition-colors ${m.isManager ? 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-red-500' : 'bg-purple-50 text-purple-600 hover:bg-purple-100 dark:bg-purple-900/30 dark:text-purple-400'}`}>
+                                                                        {m.isManager ? '총무 해제' : '총무 지정'}
+                                                                    </button>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -1059,20 +1160,6 @@
                         <main className="p-4 md:p-8">
                             {mainCategory === 'conquest' && (
                                 <div className="flex flex-col gap-6">
-                                    {/* 누적 진행 시간 표시부 */}
-                                    <div className="dashboard-card p-4 md:p-5 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-l-[8px] border-blue-500 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 bg-white dark:bg-slate-800 rounded-full flex items-center justify-center text-blue-500 shadow-sm"><i className="fas fa-chart-bar"></i></div>
-                                            <div>
-                                                <h3 className="text-sm font-black text-slate-800 dark:text-slate-100">📊 현재 누적 진행 시간</h3>
-                                                <p className="text-[10px] text-slate-500 dark:text-slate-400">모든 회차의 균격 진행 시간을 합산한 결과입니다.</p>
-                                            </div>
-                                        </div>
-                                        <div className="text-2xl md:text-3xl font-black font-mono text-blue-600 dark:text-blue-400 italic">
-                                            {Math.floor((stats.playerMap[nickname]?.totalInputTimeSec || 0) / 60)}분 {String((stats.playerMap[nickname]?.totalInputTimeSec || 0) % 60).padStart(2, '0')}초
-                                        </div>
-                                    </div>
-
                                     <div className="desktop-layout">
                                         <aside className="space-y-6">
                                             <div className="dashboard-card p-5 space-y-4">
@@ -1083,7 +1170,10 @@
                                                 <div className="space-y-2.5 max-h-[150px] overflow-y-auto no-scrollbar">
                                                     {logs.slice(0, 5).map((l, idx) => (
                                                         <div key={idx} className="text-[10px] leading-relaxed border-b border-slate-50 dark:border-slate-800/50 pb-1.5 animate-fadeIn">
-                                                            <span className="text-blue-500 dark:text-blue-400 font-black">[{l.nickname}]</span> <span className="dark:text-slate-200">{l.mob} 성공</span> <span className="text-slate-400 ml-1">({l.playMin}m {l.playSec}s)</span>
+                                                            <span className="text-blue-500 dark:text-blue-400 font-black">[{l.nickname}]</span> <span className="dark:text-slate-200">{l.mob} 성공</span> 
+                                                            <span className="text-slate-400 ml-1">
+                                                                {l.isMulti ? "(다중 등록됨)" : `(${l.playMin}m ${l.playSec}s)`}
+                                                            </span>
                                                         </div>
                                                     ))}
                                                     {logs.length === 0 && <p className="text-[10px] text-slate-400 text-center py-4">활동 기록 대기 중...</p>}
@@ -1113,7 +1203,7 @@
                                                 </div>
 
                                                 <div className="bg-slate-900 dark:bg-[#0B1220] rounded-[2rem] p-6 text-center border border-slate-800">
-                                                    <span className="text-[10px] text-slate-400 block mb-2 font-bold">총 소요 시간 (합산 분배)</span>
+                                                    <span className="text-[10px] text-slate-400 block mb-2 font-bold">1회당 시간 (공통 반영)</span>
                                                     <div className="flex justify-center items-center text-4xl md:text-5xl font-black text-white italic mb-6 font-mono">
                                                         <input 
                                                             type="number" 
@@ -1324,7 +1414,6 @@
                                                         </div>
                                                     </div>
                                                     
-                                                    {/* 비율 결과 캡처용 영역 (1:1 비율 최적화 구조) */}
                                                     <div id="ratio-result-card" ref={ratioCaptureRef} className="p-6 md:p-8 rounded-[2rem] bg-white dark:bg-slate-900 border-2 border-blue-500 shadow-2xl relative mt-4">
                                                         <div className="text-center mb-6 border-b border-slate-100 dark:border-slate-800 pb-4">
                                                             <h3 className="text-2xl font-black italic text-slate-900 dark:text-white">격전지 비율 최종 결과</h3>
@@ -1458,13 +1547,16 @@
                                                     <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center gap-3">
                                                         <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 shrink-0">장비 상세 지정 (선택사항)</span>
                                                         <div className="flex gap-2 w-full sm:w-auto">
+                                                            <select className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:border-emerald-500 font-bold" value={equipGrade} onChange={e => setEquipGrade(e.target.value)}>
+                                                                <option value="흰색">흰색</option><option value="초록색">초록색</option><option value="파란색">파란색</option><option value="보라색">보라색</option><option value="전설">전설</option>
+                                                            </select>
                                                             <select className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:border-emerald-500 font-bold" value={equipType} onChange={e => setEquipType(e.target.value)}>
                                                                 <option value="모자">모자</option><option value="신발">신발</option><option value="장갑">장갑</option><option value="목도리">목도리</option>
                                                             </select>
-                                                            <input type="number" min="1" className="w-20 p-2 text-xs font-mono border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-center outline-none focus:border-emerald-500 text-slate-900 dark:text-white" placeholder="값 입력" value={equipQty} onFocus={e=>e.target.select()} onChange={e => setEquipQty(e.target.value)} />
+                                                            <input type="number" min="1" className="w-16 p-2 text-xs font-mono border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-center outline-none focus:border-emerald-500 text-slate-900 dark:text-white" placeholder="수량" value={equipQty} onFocus={e=>e.target.select()} onChange={e => setEquipQty(e.target.value)} />
                                                             <button onClick={() => {
                                                                 const val = Math.max(1, Number(equipQty) || 1);
-                                                                setCustomEquipments(p => [...p, { type: equipType, qty: val }]);
+                                                                setCustomEquipments(p => [...p, { type: equipType, grade: equipGrade, qty: val }]);
                                                                 setEquipQty('');
                                                             }} className="px-3 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-[10px] font-black hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors shrink-0">+ 장비 추가</button>
                                                         </div>
@@ -1474,7 +1566,7 @@
                                                         <div className="flex flex-wrap gap-2 mt-2">
                                                             {customEquipments.map((eq, idx) => (
                                                                 <span key={idx} className="text-[10px] font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1 rounded-lg text-slate-700 dark:text-slate-300 flex items-center gap-1.5 shadow-sm">
-                                                                    장비({eq.type}) x{eq.qty}
+                                                                    [{eq.grade}] 장비({eq.type}) x{eq.qty}
                                                                     <button onClick={() => setCustomEquipments(p => p.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 ml-1"><i className="fas fa-times"></i></button>
                                                                 </span>
                                                             ))}
@@ -1546,6 +1638,15 @@
                                                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-3 gap-3">
                                                             <span className="text-[10px] text-emerald-600 dark:text-emerald-400 uppercase tracking-widest font-black">출력 결과물</span>
                                                             <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                                                                <button onClick={() => {
+                                                                    if(!isDistSaved && distResult) {
+                                                                        saveDistributionHistory(distResult);
+                                                                        setIsDistSaved(true);
+                                                                        showAlert("분배 결과가 기록에 안전하게 저장되었습니다.");
+                                                                    }
+                                                                }} className={`flex-1 sm:flex-none px-3 py-2 rounded-lg text-[10px] font-black transition-colors shadow-sm whitespace-nowrap ${isDistSaved ? 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed' : 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 hover:bg-purple-200 dark:hover:bg-purple-800/50'}`}>
+                                                                    <i className={`fas ${isDistSaved ? 'fa-check' : 'fa-save'} mr-1`}></i>{isDistSaved ? '저장 완료됨' : '분배 기록 저장'}
+                                                                </button>
                                                                 <button onClick={() => {
                                                                     let txt = `━━━━━━━━━━━━\n분배 결과 (${distResult.type})\n━━━━━━━━━━━━\n`;
                                                                     distResult.list.forEach(r => txt += `${r.itemStr} - ${r.winner}\n`);
@@ -1629,7 +1730,6 @@
                                             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold">
                                                 {rankingData.weekly.map((m, i) => {
                                                     const pStat = stats.playerMap[m.name] || { points: 0, normalCount: 0, bossCount: 0, latestTime: 0 };
-                                                    const status = rankingData.getPersonalStatus(m.name);
                                                     return (
                                                         <tr key={m.id} className={`hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors ${i === 0 ? 'bg-yellow-50/30 dark:bg-yellow-950/10' : ''}`}>
                                                             <td className={`px-3 py-3 text-center font-black ${i === 0 ? 'text-yellow-500 text-base' : i === 1 ? 'text-slate-400' : i === 2 ? 'text-amber-600' : 'text-slate-500'}`}>
@@ -1670,36 +1770,161 @@
                             )}
 
                             {mainCategory === 'history' && (
-                                <div className="max-w-4xl mx-auto dashboard-card p-6 md:p-8 animate-fadeIn border-t-8 border-pink-500">
-                                    <div className="flex items-center gap-3 mb-8 border-b border-slate-100 dark:border-slate-800 pb-4">
-                                        <div className="w-10 h-10 rounded-full bg-pink-100 text-pink-600 dark:bg-pink-900/30 flex items-center justify-center text-xl shadow-inner"><i className="fas fa-history"></i></div>
-                                        <div>
-                                            <h2 className="text-xl font-black italic text-slate-900 dark:text-white">모든 처치 기록 현황</h2>
-                                            <p className="text-[10px] text-slate-500 dark:text-slate-400">시스템에 등록된 전체 작전 로그입니다.</p>
+                                <div className="max-w-5xl mx-auto dashboard-card p-4 md:p-8 animate-fadeIn border-t-8 border-pink-500">
+                                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-slate-100 dark:border-slate-800 pb-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-full bg-pink-100 text-pink-600 dark:bg-pink-900/30 flex items-center justify-center text-xl shadow-inner"><i className="fas fa-history"></i></div>
+                                            <div>
+                                                <h2 className="text-xl font-black italic text-slate-900 dark:text-white">길드 종합 기록 관리</h2>
+                                                <p className="text-[10px] text-slate-500 dark:text-slate-400">처치 기록과 분배 이력을 체계적으로 관리합니다.</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-2 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-xl w-full md:w-auto overflow-x-auto no-scrollbar shadow-inner">
+                                            <button onClick={() => setHistoryTab('conquest')} className={`px-4 py-2 rounded-lg text-xs font-black transition-all whitespace-nowrap ${historyTab === 'conquest' ? 'bg-white dark:bg-slate-600 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}>⚔️ 균격 처치 기록</button>
+                                            <button onClick={() => setHistoryTab('loot')} className={`px-4 py-2 rounded-lg text-xs font-black transition-all whitespace-nowrap ${historyTab === 'loot' ? 'bg-white dark:bg-slate-600 text-emerald-600 dark:text-emerald-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}>🎁 격전지 분배 이력</button>
                                         </div>
                                     </div>
-                                    <div className="space-y-3 max-h-[600px] overflow-y-auto no-scrollbar pr-2">
-                                        {logs.map((l, idx) => (
-                                            <div key={idx} className="p-4 md:p-5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                                                <div className="flex items-center gap-4">
-                                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm shadow-inner shrink-0 ${l.mob === '보스' ? 'bg-red-100 text-red-600 dark:bg-red-900/30' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/30'}`}>
-                                                        <i className={`fas ${l.mob === '보스' ? 'fa-skull' : 'fa-crosshairs'}`}></i>
+
+                                    {historyTab === 'conquest' && (
+                                        <div className="space-y-3 max-h-[600px] overflow-y-auto no-scrollbar pr-2 animate-fadeIn">
+                                            {logs.map((l, idx) => (
+                                                <div key={idx} className="p-4 md:p-5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm shadow-inner shrink-0 ${l.mob === '보스' ? 'bg-red-100 text-red-600 dark:bg-red-900/30' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/30'}`}>
+                                                            <i className={`fas ${l.mob === '보스' ? 'fa-skull' : 'fa-crosshairs'}`}></i>
+                                                        </div>
+                                                        <div>
+                                                            <div className="text-sm md:text-base font-black text-slate-900 dark:text-white">{l.nickname} <span className="text-[10px] font-normal text-slate-500 ml-1">대원</span></div>
+                                                            <div className="text-[11px] text-slate-500 dark:text-slate-400 font-bold mt-0.5"><span className={l.mob === '보스' ? 'text-red-500' : 'text-blue-500'}>{l.mob}</span> 공략 성공</div>
+                                                        </div>
                                                     </div>
-                                                    <div>
-                                                        <div className="text-sm md:text-base font-black text-slate-900 dark:text-white">{l.nickname} <span className="text-[10px] font-normal text-slate-500 ml-1">대원</span></div>
-                                                        <div className="text-[11px] text-slate-500 dark:text-slate-400 font-bold mt-0.5"><span className={l.mob === '보스' ? 'text-red-500' : 'text-blue-500'}>{l.mob}</span> 공략 성공 ({l.playMin}분 {l.playSec}초)</div>
+                                                    <div className="text-left sm:text-right flex flex-col items-start sm:items-end gap-1 ml-14 sm:ml-0">
+                                                        <div className="text-[10px] text-slate-400 dark:text-slate-500 font-mono bg-white dark:bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 w-fit">
+                                                            {l.timestamp?.seconds ? new Date(l.timestamp.seconds * 1000).toLocaleString() : '방금 전'}
+                                                        </div>
+                                                        <div className={`text-[11px] font-black px-2 py-0.5 rounded-md inline-block ${l.isMulti ? 'bg-purple-50 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400' : 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400'}`}>
+                                                            {l.isMulti ? '다중 등록됨' : `${l.playMin}분 ${l.playSec}초 소요`}
+                                                        </div>
                                                     </div>
                                                 </div>
-                                                <div className="text-left sm:text-right text-[10px] text-slate-400 dark:text-slate-500 font-mono ml-14 sm:ml-0 bg-white dark:bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 w-fit sm:w-auto">
-                                                    {l.timestamp?.seconds ? new Date(l.timestamp.seconds * 1000).toLocaleString() : '방금 전'}
+                                            ))}
+                                            {logs.length === 0 && <div className="text-center py-12 text-slate-400 font-bold">기록된 데이터가 없습니다.</div>}
+                                        </div>
+                                    )}
+
+                                    {historyTab === 'loot' && (
+                                        <div className="animate-fadeIn flex flex-col h-full max-h-[800px]">
+                                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+                                                <div className="flex w-full sm:w-auto gap-2">
+                                                    <div className="relative flex-1 sm:w-56">
+                                                        <input type="text" value={lootSearch} onChange={e => setLootSearch(e.target.value)} placeholder="🔍 닉네임 또는 보상 검색" className="w-full p-2.5 pl-9 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:border-emerald-500 text-slate-900 dark:text-white font-bold" />
+                                                        <i className="fas fa-search absolute left-3.5 top-3 text-[11px] text-slate-400"></i>
+                                                    </div>
+                                                    <select className="p-2.5 border border-slate-200 dark:border-slate-700 rounded-xl text-xs bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white outline-none focus:border-emerald-500 font-bold" value={lootSort} onChange={e => setLootSort(e.target.value)}>
+                                                        <option value="desc">최신순 정렬</option>
+                                                        <option value="asc">과거순 정렬</option>
+                                                    </select>
                                                 </div>
+                                                {canEditLoot && (
+                                                    <button onClick={() => setShowManualLootForm(!showManualLootForm)} className="w-full sm:w-auto px-4 py-2.5 bg-slate-800 dark:bg-slate-700 text-white rounded-xl text-xs font-black shadow-sm hover:bg-slate-900 transition-colors shrink-0 flex justify-center items-center gap-2">
+                                                        {showManualLootForm ? <><i className="fas fa-times"></i>닫기</> : <><i className="fas fa-plus"></i>수동 분배 기록 추가</>}
+                                                    </button>
+                                                )}
                                             </div>
-                                        ))}
-                                        {logs.length === 0 && <div className="text-center py-12 text-slate-400 font-bold">기록된 데이터가 없습니다.</div>}
-                                    </div>
+
+                                            {showManualLootForm && canEditLoot && (
+                                                <form onSubmit={handleAddManualLoot} className="mb-6 p-5 bg-emerald-50/50 dark:bg-emerald-900/10 border-2 border-emerald-200 dark:border-emerald-800/50 rounded-2xl animate-fadeIn">
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+                                                        <div className="space-y-1">
+                                                            <label className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase">당첨 닉네임</label>
+                                                            <select className="w-full p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-emerald-500 text-xs font-bold" value={manualLootWinner} onChange={e => setManualLootWinner(e.target.value)}>
+                                                                <option value="">길드원 선택 ▼</option>
+                                                                {members.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+                                                            </select>
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <label className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase">보상 종류</label>
+                                                            <select className="w-full p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-emerald-500 text-xs font-bold" value={manualLootItem} onChange={e => setManualLootItem(e.target.value)}>
+                                                                <option value="">보상 선택 ▼</option>
+                                                                <option value="장비">장비</option>
+                                                                {REWARDS_LIST.map(r => <option key={r} value={r}>{r}</option>)}
+                                                            </select>
+                                                        </div>
+                                                        {manualLootItem === '장비' && (
+                                                            <>
+                                                                <div className="space-y-1">
+                                                                    <label className="text-[10px] text-amber-600 dark:text-amber-400 font-bold uppercase">장비 등급</label>
+                                                                    <select className="w-full p-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl outline-none focus:border-amber-500 text-xs font-bold text-amber-700 dark:text-amber-300" value={manualLootGrade} onChange={e => setManualLootGrade(e.target.value)}>
+                                                                        <option value="흰색">흰색</option><option value="초록색">초록색</option><option value="파란색">파란색</option><option value="보라색">보라색</option><option value="전설">전설</option>
+                                                                    </select>
+                                                                </div>
+                                                                <div className="space-y-1">
+                                                                    <label className="text-[10px] text-amber-600 dark:text-amber-400 font-bold uppercase">장비 부위</label>
+                                                                    <select className="w-full p-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl outline-none focus:border-amber-500 text-xs font-bold text-amber-700 dark:text-amber-300" value={manualEquipType} onChange={e => setManualEquipType(e.target.value)}>
+                                                                        <option value="모자">모자</option><option value="신발">신발</option><option value="장갑">장갑</option><option value="목도리">목도리</option>
+                                                                    </select>
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                        <div className="space-y-1">
+                                                            <label className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase">수량</label>
+                                                            <input type="number" min="1" className="w-full p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-emerald-500 text-xs font-mono font-bold" value={manualLootQty} onChange={e => setManualLootQty(Number(e.target.value) || 1)} />
+                                                        </div>
+                                                        <div className="lg:col-span-3 space-y-1">
+                                                            <label className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase">추가 메모 (선택)</label>
+                                                            <input type="text" className="w-full p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-emerald-500 text-xs" placeholder="기타 참고사항을 입력하세요" value={manualLootMemo} onChange={e => setManualLootMemo(e.target.value)} />
+                                                        </div>
+                                                        <div className="lg:col-span-1">
+                                                            <button type="submit" className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-black shadow-md transition-colors">기록 저장</button>
+                                                        </div>
+                                                    </div>
+                                                </form>
+                                            )}
+
+                                            <div className="flex-1 overflow-y-auto pr-1 no-scrollbar pb-20">
+                                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                                    {flatLootLogs.map((item) => (
+                                                        <div key={item.id} className="relative p-5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-all group overflow-hidden">
+                                                            <div className={`absolute top-0 left-0 w-1 h-full ${item.distType === '수동 이력 추가' ? 'bg-amber-400' : 'bg-emerald-400'}`}></div>
+                                                            <div className="flex justify-between items-start mb-3">
+                                                                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono tracking-widest">{new Date(item.timestamp).toLocaleString()}</span>
+                                                                <div className={`flex gap-2 transition-opacity bg-white/80 dark:bg-slate-800/80 px-2 rounded-lg backdrop-blur-sm ${canEditLoot ? 'opacity-0 group-hover:opacity-100' : 'hidden'}`}>
+                                                                    <button onClick={() => setEditLootItem(item)} className="text-slate-400 hover:text-blue-500 p-1 transition-colors"><i className="fas fa-edit"></i></button>
+                                                                    <button onClick={() => handleDeleteLootItem(item)} className="text-slate-400 hover:text-red-500 p-1 transition-colors"><i className="fas fa-trash"></i></button>
+                                                                </div>
+                                                            </div>
+                                                            
+                                                            <div className="flex items-center gap-4 mb-4">
+                                                                <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl shadow-inner shrink-0 ${item.itemStr.includes('장비') ? 'bg-amber-100 text-amber-500 dark:bg-amber-900/30' : 'bg-emerald-100 text-emerald-500 dark:bg-emerald-900/30'}`}>
+                                                                    <i className={`fas ${item.itemStr.includes('장비') ? 'fa-khanda' : 'fa-gift'}`}></i>
+                                                                </div>
+                                                                <div className="min-w-0">
+                                                                    <div className="text-sm font-black text-slate-500 dark:text-slate-400 mb-0.5">닉네임: <span className="text-slate-900 dark:text-white text-base">{item.winner}</span></div>
+                                                                    <div className="text-lg font-black text-emerald-600 dark:text-emerald-400 truncate">{item.itemStr}</div>
+                                                                </div>
+                                                            </div>
+                                                            
+                                                            <div className="bg-slate-50 dark:bg-slate-900 p-2.5 rounded-xl flex flex-col gap-1.5 border border-slate-100 dark:border-slate-800">
+                                                                <div className="flex justify-between items-center text-[10px] font-bold">
+                                                                    <span className="text-slate-400">분배방식</span>
+                                                                    <span className={item.distType === '수동 이력 추가' ? 'text-amber-500' : 'text-blue-500'}>{item.distType}</span>
+                                                                </div>
+                                                                {item.memo && (
+                                                                    <div className="flex justify-between items-start text-[10px] font-bold border-t border-slate-200 dark:border-slate-700 pt-1.5">
+                                                                        <span className="text-slate-400 shrink-0 mr-2">메모</span>
+                                                                        <span className="text-slate-600 dark:text-slate-300 text-right break-words">{item.memo}</span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                                {flatLootLogs.length === 0 && <div className="text-center py-20 text-slate-400 font-bold">표시할 분배 이력이 없습니다.</div>}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             )}
-
                         </main>
 
                         {/* 하단 플로팅 컨트롤 */}
@@ -1721,7 +1946,7 @@
                                     <div className="hidden lg:flex flex-col items-center justify-center flex-1 px-8 border-x border-white/10 mx-6 overflow-hidden">
                                         <span className="text-[8px] text-slate-400 uppercase tracking-widest mb-1">실시간 작전 피드</span>
                                         <div className="text-[10px] text-slate-200 italic truncate max-w-full text-center log-animate" key={latestLog ? latestLog.timestamp?.seconds : 'init'}>
-                                            {latestLog ? (<>🚩 <span className="text-blue-400 font-black">[{latestLog.nickname}]</span> {latestLog.mob} 공략 성공</>) : ("새로운 작전 데이터를 기다리는 중...")}
+                                            {latestLog ? (<>🚩 <span className="text-blue-400 font-black">[{latestLog.nickname}]</span> {latestLog.mob} 공략 성공 {latestLog.isMulti ? '(다중 등록)' : ''}</>) : ("새로운 작전 데이터를 기다리는 중...")}
                                         </div>
                                     </div>
                                     <div className="flex items-center justify-around md:justify-end gap-4 md:gap-10 w-full md:w-auto shrink-0">
@@ -1779,14 +2004,39 @@
                                                         <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold">{l.mob} 처치</div>
                                                     </div>
                                                 </div>
-                                                <div className="text-right">
-                                                    <div className="text-[10px] text-slate-400 dark:text-slate-500 font-mono mb-0.5">{l.timestamp?.seconds ? new Date(l.timestamp.seconds * 1000).toLocaleString() : '방금 전'}</div>
-                                                    <div className="text-[11px] font-black text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-md inline-block">{l.playMin}분 {l.playSec}초 소요</div>
+                                                <div className="text-right flex flex-col items-end gap-1">
+                                                    <div className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">{l.timestamp?.seconds ? new Date(l.timestamp.seconds * 1000).toLocaleString() : '방금 전'}</div>
+                                                    <div className={`text-[11px] font-black px-2 py-0.5 rounded-md inline-block ${l.isMulti ? 'bg-purple-50 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400' : 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400'}`}>
+                                                        {l.isMulti ? '다중 등록됨' : `${l.playMin}분 ${l.playSec}초 소요`}
+                                                    </div>
                                                 </div>
                                             </div>
                                         ))}
                                         {logs.length === 0 && <div className="text-center text-slate-400 dark:text-slate-500 py-10 font-bold">기록이 없습니다.</div>}
                                     </div>
+                                </div>
+                            </div>
+                        )}
+                        
+                        {/* 분배 이력 수정 모달 */}
+                        {editLootItem && canEditLoot && (
+                            <div className="fixed inset-0 z-[1400] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn text-slate-900 dark:text-white" onClick={() => setEditLootItem(null)}>
+                                <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl p-8 max-w-sm w-full border-t-[8px] border-emerald-500" onClick={e=>e.stopPropagation()}>
+                                    <h3 className="text-lg font-black mb-6 flex items-center gap-2"><i className="fas fa-edit text-emerald-500"></i>분배 이력 수정</h3>
+                                    <form onSubmit={handleUpdateLootItem} className="space-y-4">
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">닉네임</label>
+                                            <input type="text" className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl dark:bg-slate-800 text-sm outline-none focus:border-emerald-500 font-bold" value={editLootItem.winner} onChange={e => setEditLootItem({...editLootItem, winner: e.target.value})} required />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">보상 내용</label>
+                                            <input type="text" className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl dark:bg-slate-800 text-sm outline-none focus:border-emerald-500 font-bold" value={editLootItem.itemStr} onChange={e => setEditLootItem({...editLootItem, itemStr: e.target.value})} required />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3 pt-4">
+                                            <button type="button" onClick={() => setEditLootItem(null)} className="py-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-black hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">취소</button>
+                                            <button type="submit" className="py-3 bg-emerald-500 text-white rounded-xl text-xs font-black shadow-md hover:bg-emerald-600 transition-colors">수정 반영</button>
+                                        </div>
+                                    </form>
                                 </div>
                             </div>
                         )}
