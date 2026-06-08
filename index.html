@@ -198,6 +198,7 @@
             const ratioCaptureRef = useRef(null); 
 
             // 수동 이력 추가 관련 상태
+            const [manualStagingList, setManualStagingList] = useState([]);
             const [manualLootItem, setManualLootItem] = useState('');
             const [manualLootWinner, setManualLootWinner] = useState('');
             const [manualLootQty, setManualLootQty] = useState(1);
@@ -209,6 +210,7 @@
             const [lootSearch, setLootSearch] = useState('');
             const [lootSort, setLootSort] = useState('desc');
             const [editLootItem, setEditLootItem] = useState(null);
+            const [selectedLootGroupId, setSelectedLootGroupId] = useState(null); // 상세보기용
 
             // 분배 애니메이션 연출 상태
             const [isDistAnimating, setIsDistAnimating] = useState(false);
@@ -702,72 +704,91 @@
                 });
             };
 
-            const handleAddManualLoot = async (e) => {
+            const handleAddStaging = (e) => {
                 e.preventDefault();
-                if(!manualLootWinner) return showAlert("당첨될 길드원을 지정해주세요.", "error");
+                if(!manualLootWinner) return showAlert("당첨 길드원을 선택해주세요.", "error");
                 if(!manualLootItem) return showAlert("보상 종류를 선택해주세요.", "error");
-                try {
-                    const ts = new Date(); // 항상 현재 시간으로 저장
-                    let finalItemStr = manualLootItem;
-                    if (manualLootItem === '장비') {
-                        finalItemStr = `[${manualLootGrade}] 장비(${manualEquipType})`;
-                    }
-                    
-                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'loot_history_v24'), {
-                        distType: '수동 이력 추가',
-                        list: [{ itemStr: `${finalItemStr} x${manualLootQty}`, winner: manualLootWinner }],
-                        memo: manualLootMemo,
-                        timestamp: ts
-                    });
-                    showAlert("수동 이력이 정상 추가되었습니다.");
-                    setManualLootQty(1);
-                    setManualLootWinner('');
-                    setManualLootItem('');
-                    setManualLootGrade('흰색');
-                    setManualEquipType('모자');
-                    setManualLootMemo('');
-                    setShowManualLootForm(false);
-                } catch(err) { showAlert("저장 실패", "error"); }
-            };
-
-            const flatLootLogs = useMemo(() => {
-                let result = [];
-                lootLogs.forEach(doc => {
-                    const ts = doc.timestamp?.seconds ? doc.timestamp.seconds * 1000 : (doc.timestamp ? new Date(doc.timestamp).getTime() : Date.now());
-                    if(doc.list && Array.isArray(doc.list)) {
-                        doc.list.forEach((item, idx) => {
-                            result.push({
-                                id: `${doc.id}_${idx}`,
-                                docId: doc.id,
-                                idx: idx,
-                                distType: doc.distType,
-                                memo: doc.memo || '',
-                                timestamp: ts,
-                                ...item
-                            });
-                        });
-                    }
-                });
                 
-                if (lootSearch) {
-                    const sl = lootSearch.toLowerCase();
-                    result = result.filter(r => (r.winner && r.winner.toLowerCase().includes(sl)) || (r.itemStr && r.itemStr.toLowerCase().includes(sl)) || (r.distType && r.distType.toLowerCase().includes(sl)));
+                let finalItemStr = manualLootItem;
+                let isEquip = false;
+                if (manualLootItem === '장비') {
+                    finalItemStr = `[${manualLootGrade}] 장비(${manualEquipType})`;
+                    isEquip = true;
                 }
                 
-                return result.sort((a,b) => lootSort === 'desc' ? b.timestamp - a.timestamp : a.timestamp - b.timestamp);
+                setManualStagingList(p => [...p, { winner: manualLootWinner, itemStr: finalItemStr, qty: manualLootQty, isEquip }]);
+                setManualLootWinner('');
+                setManualLootQty(1);
+            };
+
+            const handleSaveManualGroup = async () => {
+                if (manualStagingList.length === 0) return showAlert("저장할 보상 내역이 없습니다.", "error");
+                try {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'loot_history_v24'), {
+                        distType: '수동 등록 분배',
+                        list: manualStagingList,
+                        memo: manualLootMemo,
+                        timestamp: serverTimestamp()
+                    });
+                    showAlert("수동 분배 기록이 성공적으로 저장되었습니다.");
+                    setManualStagingList([]);
+                    setManualLootMemo('');
+                    setShowManualLootForm(false);
+                } catch(e) {
+                    showAlert("저장 실패", "error");
+                }
+            };
+
+            const processedLootLogs = useMemo(() => {
+                let result = [...lootLogs];
+                if (lootSearch) {
+                    const sl = lootSearch.toLowerCase();
+                    result = result.filter(doc => {
+                        if (doc.distType?.toLowerCase().includes(sl)) return true;
+                        if (doc.memo?.toLowerCase().includes(sl)) return true;
+                        return doc.list?.some(item => 
+                            item.winner?.toLowerCase().includes(sl) || 
+                            item.itemStr?.toLowerCase().includes(sl)
+                        );
+                    });
+                }
+                return result.sort((a,b) => {
+                    const timeA = a.timestamp?.seconds ? a.timestamp.seconds : (a.timestamp ? new Date(a.timestamp).getTime()/1000 : 0);
+                    const timeB = b.timestamp?.seconds ? b.timestamp.seconds : (b.timestamp ? new Date(b.timestamp).getTime()/1000 : 0);
+                    return lootSort === 'desc' ? timeB - timeA : timeA - timeB;
+                });
             }, [lootLogs, lootSearch, lootSort]);
 
-            const handleDeleteLootItem = async (item) => {
+            const currentSelectedGroup = useMemo(() => {
+                if (!selectedLootGroupId) return null;
+                return processedLootLogs.find(d => d.id === selectedLootGroupId) || null;
+            }, [selectedLootGroupId, processedLootLogs]);
+
+            const handleDeleteLootGroup = async (docId) => {
                 setUiConfirm({
-                    message: "이 분배 기록을 삭제하시겠습니까?",
+                    message: "해당 분배 기록 전체를 삭제하시겠습니까?",
                     onConfirm: async (isChecked) => {
                         try {
-                            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'loot_history_v24', item.docId);
-                            const parentDoc = lootLogs.find(d => d.id === item.docId);
+                            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'loot_history_v24', docId));
+                            showAlert("전체 기록이 삭제되었습니다.");
+                            if(selectedLootGroupId === docId) setSelectedLootGroupId(null);
+                        } catch(e) { showAlert("삭제 실패", "error"); }
+                    }
+                });
+            };
+
+            const handleDeleteLootItem = async (docId, itemIdx) => {
+                setUiConfirm({
+                    message: "해당 개인 기록만 삭제하시겠습니까?",
+                    onConfirm: async (isChecked) => {
+                        try {
+                            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'loot_history_v24', docId);
+                            const parentDoc = lootLogs.find(d => d.id === docId);
                             if (parentDoc) {
-                                const newList = parentDoc.list.filter((_, idx) => idx !== item.idx);
+                                const newList = parentDoc.list.filter((_, idx) => idx !== itemIdx);
                                 if (newList.length === 0) {
                                     await deleteDoc(docRef);
+                                    if(selectedLootGroupId === docId) setSelectedLootGroupId(null);
                                 } else {
                                     await updateDoc(docRef, { list: newList });
                                 }
@@ -790,7 +811,8 @@
                         newList[editLootItem.idx] = { 
                             ...newList[editLootItem.idx], 
                             winner: editLootItem.winner, 
-                            itemStr: editLootItem.itemStr 
+                            itemStr: editLootItem.itemStr,
+                            qty: editLootItem.qty
                         };
                         await updateDoc(docRef, { list: newList });
                         showAlert("수정되었습니다.");
@@ -865,7 +887,7 @@
 
                     basketItems.filter(b => b.name !== '장비').forEach(item => {
                         const winner = pNames[Math.floor(Math.random() * pNames.length)];
-                        resultArr.push({ itemStr: `${item.name} (일괄)`, winner, isEquip: false, isRandom: true });
+                        resultArr.push({ itemStr: `${item.name}`, winner, isEquip: false, isRandom: true });
                     });
                 } else if (type === 'contrib') {
                     if(calcStrikeReport.individualReports.length === 0) return showAlert("격추 데이터가 없습니다.", "error");
@@ -890,7 +912,7 @@
                         for(let i=0; i<remain; i++){ fractions[i].base += 1; }
                         
                         fractions.forEach(f => {
-                            if(f.base > 0) resultArr.push({ itemStr: `${item.name} x${f.base}`, winner: f.name, isEquip: item.isEquip, isRandom: false });
+                            if(f.base > 0) resultArr.push({ itemStr: `${item.name}`, winner: f.name, qty: f.base, isEquip: item.isEquip, isRandom: false });
                         });
                     });
                 }
@@ -940,7 +962,7 @@
                     if (!acc[curr.winner][curr.itemStr]) {
                         acc[curr.winner][curr.itemStr] = { ...curr, count: 0 };
                     }
-                    acc[curr.winner][curr.itemStr].count += 1;
+                    acc[curr.winner][curr.itemStr].count += curr.qty || 1;
                     return acc;
                 }, {});
             }, [distResult]);
@@ -1833,18 +1855,18 @@
                                             </div>
 
                                             {showManualLootForm && canEditLoot && (
-                                                <form onSubmit={handleAddManualLoot} className="mb-6 p-5 bg-emerald-50/50 dark:bg-emerald-900/10 border-2 border-emerald-200 dark:border-emerald-800/50 rounded-2xl animate-fadeIn">
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+                                                <div className="mb-6 p-5 bg-emerald-50/50 dark:bg-emerald-900/10 border-2 border-emerald-200 dark:border-emerald-800/50 rounded-2xl animate-fadeIn">
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end mb-4">
                                                         <div className="space-y-1">
                                                             <label className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase">당첨 닉네임</label>
-                                                            <select className="w-full p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-emerald-500 text-xs font-bold" value={manualLootWinner} onChange={e => setManualLootWinner(e.target.value)}>
+                                                            <select className="w-full p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-emerald-500 text-xs font-bold text-slate-900 dark:text-white" value={manualLootWinner} onChange={e => setManualLootWinner(e.target.value)}>
                                                                 <option value="">길드원 선택 ▼</option>
                                                                 {members.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
                                                             </select>
                                                         </div>
                                                         <div className="space-y-1">
                                                             <label className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase">보상 종류</label>
-                                                            <select className="w-full p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-emerald-500 text-xs font-bold" value={manualLootItem} onChange={e => setManualLootItem(e.target.value)}>
+                                                            <select className="w-full p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-emerald-500 text-xs font-bold text-slate-900 dark:text-white" value={manualLootItem} onChange={e => setManualLootItem(e.target.value)}>
                                                                 <option value="">보상 선택 ▼</option>
                                                                 <option value="장비">장비</option>
                                                                 {REWARDS_LIST.map(r => <option key={r} value={r}>{r}</option>)}
@@ -1868,58 +1890,90 @@
                                                         )}
                                                         <div className="space-y-1">
                                                             <label className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase">수량</label>
-                                                            <input type="number" min="1" className="w-full p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-emerald-500 text-xs font-mono font-bold" value={manualLootQty} onChange={e => setManualLootQty(Number(e.target.value) || 1)} />
+                                                            <input type="number" min="1" className="w-full p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-emerald-500 text-xs font-mono font-bold text-slate-900 dark:text-white" value={manualLootQty} onChange={e => setManualLootQty(Number(e.target.value) || 1)} />
                                                         </div>
                                                         <div className="lg:col-span-3 space-y-1">
-                                                            <label className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase">추가 메모 (선택)</label>
-                                                            <input type="text" className="w-full p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-emerald-500 text-xs" placeholder="기타 참고사항을 입력하세요" value={manualLootMemo} onChange={e => setManualLootMemo(e.target.value)} />
-                                                        </div>
-                                                        <div className="lg:col-span-1">
-                                                            <button type="submit" className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-black shadow-md transition-colors">기록 저장</button>
+                                                            <button type="button" onClick={handleAddStaging} className="w-full py-2.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400 rounded-xl text-xs font-black shadow-sm transition-colors border border-emerald-200 dark:border-emerald-800">+ 목록에 아이템 추가</button>
                                                         </div>
                                                     </div>
-                                                </form>
+
+                                                    {manualStagingList.length > 0 && (
+                                                        <div className="mt-4 pt-4 border-t border-emerald-200 dark:border-emerald-800/50 space-y-4">
+                                                            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                                                                <div className="bg-slate-50 dark:bg-slate-800 px-4 py-2 border-b border-slate-200 dark:border-slate-700 text-[10px] font-bold text-slate-500 dark:text-slate-400 flex justify-between">
+                                                                    <span>현재 등록 대기 중인 보상 ({manualStagingList.length}건)</span>
+                                                                </div>
+                                                                <ul className="divide-y divide-slate-100 dark:divide-slate-800 max-h-40 overflow-y-auto">
+                                                                    {manualStagingList.map((stItem, sIdx) => (
+                                                                        <li key={sIdx} className="px-4 py-2.5 flex justify-between items-center text-xs">
+                                                                            <span className="font-bold text-slate-900 dark:text-white">{stItem.winner}</span>
+                                                                            <div className="flex items-center gap-3">
+                                                                                <span className={stItem.isEquip ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}>{stItem.itemStr} x{stItem.qty}</span>
+                                                                                <button type="button" onClick={() => setManualStagingList(p => p.filter((_, i) => i !== sIdx))} className="text-red-400 hover:text-red-600"><i className="fas fa-times"></i></button>
+                                                                            </div>
+                                                                        </li>
+                                                                    ))}
+                                                                </ul>
+                                                            </div>
+                                                            <div className="space-y-1">
+                                                                <label className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase">추가 메모 (선택사항)</label>
+                                                                <input type="text" className="w-full p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-emerald-500 text-xs text-slate-900 dark:text-white" placeholder="기타 참고사항을 입력하세요 (예: 6월 1주차 정산 누락분)" value={manualLootMemo} onChange={e => setManualLootMemo(e.target.value)} />
+                                                            </div>
+                                                            <button type="button" onClick={handleSaveManualGroup} className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-black shadow-lg transition-colors">
+                                                                현재 목록으로 분배 기록 저장 (현재 시간 자동 적용)
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             )}
 
                                             <div className="flex-1 overflow-y-auto pr-1 no-scrollbar pb-20">
-                                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                                                    {flatLootLogs.map((item) => (
-                                                        <div key={item.id} className="relative p-5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-all group overflow-hidden">
-                                                            <div className={`absolute top-0 left-0 w-1 h-full ${item.distType === '수동 이력 추가' ? 'bg-amber-400' : 'bg-emerald-400'}`}></div>
-                                                            <div className="flex justify-between items-start mb-3">
-                                                                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono tracking-widest">{new Date(item.timestamp).toLocaleString()}</span>
-                                                                <div className={`flex gap-2 transition-opacity bg-white/80 dark:bg-slate-800/80 px-2 rounded-lg backdrop-blur-sm ${canEditLoot ? 'opacity-0 group-hover:opacity-100' : 'hidden'}`}>
-                                                                    <button onClick={() => setEditLootItem(item)} className="text-slate-400 hover:text-blue-500 p-1 transition-colors"><i className="fas fa-edit"></i></button>
-                                                                    <button onClick={() => handleDeleteLootItem(item)} className="text-slate-400 hover:text-red-500 p-1 transition-colors"><i className="fas fa-trash"></i></button>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                                                    {processedLootLogs.map((docItem) => {
+                                                        const uniqueWinners = new Set(docItem.list?.map(i => i.winner)).size || 0;
+                                                        const totalItems = docItem.list?.length || 0;
+                                                        
+                                                        return (
+                                                        <div key={docItem.id} className="relative p-5 md:p-6 rounded-2xl bg-white dark:bg-slate-800 border-t-[6px] border-x border-b border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-all flex flex-col group border-t-emerald-500">
+                                                            <div className="flex justify-between items-start mb-3 border-b border-slate-100 dark:border-slate-700/50 pb-3">
+                                                                <div className="flex flex-col gap-1">
+                                                                    <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono tracking-widest">{docItem.timestamp?.seconds ? new Date(docItem.timestamp.seconds * 1000).toLocaleString() : (docItem.timestamp ? new Date(docItem.timestamp).toLocaleString() : '')}</span>
+                                                                    <span className={`text-sm font-black ${docItem.distType === '수동 등록 분배' ? 'text-amber-500 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{docItem.distType}</span>
                                                                 </div>
-                                                            </div>
-                                                            
-                                                            <div className="flex items-center gap-4 mb-4">
-                                                                <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl shadow-inner shrink-0 ${item.itemStr.includes('장비') ? 'bg-amber-100 text-amber-500 dark:bg-amber-900/30' : 'bg-emerald-100 text-emerald-500 dark:bg-emerald-900/30'}`}>
-                                                                    <i className={`fas ${item.itemStr.includes('장비') ? 'fa-khanda' : 'fa-gift'}`}></i>
-                                                                </div>
-                                                                <div className="min-w-0">
-                                                                    <div className="text-sm font-black text-slate-500 dark:text-slate-400 mb-0.5">닉네임: <span className="text-slate-900 dark:text-white text-base">{item.winner}</span></div>
-                                                                    <div className="text-lg font-black text-emerald-600 dark:text-emerald-400 truncate">{item.itemStr}</div>
-                                                                </div>
-                                                            </div>
-                                                            
-                                                            <div className="bg-slate-50 dark:bg-slate-900 p-2.5 rounded-xl flex flex-col gap-1.5 border border-slate-100 dark:border-slate-800">
-                                                                <div className="flex justify-between items-center text-[10px] font-bold">
-                                                                    <span className="text-slate-400">분배방식</span>
-                                                                    <span className={item.distType === '수동 이력 추가' ? 'text-amber-500' : 'text-blue-500'}>{item.distType}</span>
-                                                                </div>
-                                                                {item.memo && (
-                                                                    <div className="flex justify-between items-start text-[10px] font-bold border-t border-slate-200 dark:border-slate-700 pt-1.5">
-                                                                        <span className="text-slate-400 shrink-0 mr-2">메모</span>
-                                                                        <span className="text-slate-600 dark:text-slate-300 text-right break-words">{item.memo}</span>
+                                                                {canEditLoot && (
+                                                                    <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                        <button onClick={() => handleDeleteLootGroup(docItem.id)} className="text-slate-300 hover:text-red-500 p-1 transition-colors text-xs" title="그룹 전체 삭제"><i className="fas fa-trash-alt"></i></button>
                                                                     </div>
                                                                 )}
                                                             </div>
+                                                            
+                                                            <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl mb-4 border border-slate-100 dark:border-slate-700/50">
+                                                                <div className="flex flex-col items-center flex-1 border-r border-slate-200 dark:border-slate-700">
+                                                                    <span className="text-[9px] text-slate-400 font-bold mb-0.5">참여 인원</span>
+                                                                    <span className="text-sm font-black text-slate-700 dark:text-slate-200">{uniqueWinners}명</span>
+                                                                </div>
+                                                                <div className="flex flex-col items-center flex-1">
+                                                                    <span className="text-[9px] text-slate-400 font-bold mb-0.5">보상 총합</span>
+                                                                    <span className="text-sm font-black text-slate-700 dark:text-slate-200">{totalItems}건</span>
+                                                                </div>
+                                                            </div>
+                                                            
+                                                            {docItem.memo && (
+                                                                <div className="text-[10px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900 px-3 py-2 rounded-lg mb-4 truncate border border-slate-100 dark:border-slate-800">
+                                                                    <span className="font-bold mr-1">메모:</span>{docItem.memo}
+                                                                </div>
+                                                            )}
+                                                            
+                                                            <div className="mt-auto pt-2">
+                                                                <button onClick={() => setSelectedLootGroupId(docItem.id)} className="w-full py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-black hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
+                                                                    상세보기 <i className="fas fa-chevron-right ml-1 text-[10px]"></i>
+                                                                </button>
+                                                            </div>
                                                         </div>
-                                                    ))}
+                                                        );
+                                                    })}
                                                 </div>
-                                                {flatLootLogs.length === 0 && <div className="text-center py-20 text-slate-400 font-bold">표시할 분배 이력이 없습니다.</div>}
+                                                {processedLootLogs.length === 0 && <div className="text-center py-20 text-slate-400 font-bold">표시할 분배 이력이 없습니다.</div>}
                                             </div>
                                         </div>
                                     )}
@@ -1984,7 +2038,7 @@
                             </div>
                         )}
 
-                        {/* 기록 모달 */}
+                        {/* 처치 기록 모달 */}
                         {showHistoryModal && (
                             <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn text-slate-900 dark:text-white" onClick={() => setShowHistoryModal(false)}>
                                 <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col border-t-8 border-blue-500" onClick={e=>e.stopPropagation()}>
@@ -2018,19 +2072,66 @@
                             </div>
                         )}
                         
-                        {/* 분배 이력 수정 모달 */}
+                        {/* 분배 이력 그룹 상세 보기 모달 */}
+                        {currentSelectedGroup && (
+                            <div className="fixed inset-0 z-[1400] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn text-slate-900 dark:text-white" onClick={() => setSelectedLootGroupId(null)}>
+                                <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col border-t-8 border-emerald-500" onClick={e=>e.stopPropagation()}>
+                                    <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center shrink-0">
+                                        <div>
+                                            <h3 className="text-lg font-black flex items-center gap-2">
+                                                <i className="fas fa-list text-emerald-500"></i> 분배 결과 상세
+                                            </h3>
+                                            <span className="text-[10px] text-slate-400 font-mono mt-1 block">
+                                                {currentSelectedGroup.timestamp?.seconds ? new Date(currentSelectedGroup.timestamp.seconds * 1000).toLocaleString() : (currentSelectedGroup.timestamp ? new Date(currentSelectedGroup.timestamp).toLocaleString() : '')}
+                                            </span>
+                                        </div>
+                                        <button onClick={() => setSelectedLootGroupId(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"><i className="fas fa-times text-xl"></i></button>
+                                    </div>
+                                    <div className="p-6 overflow-y-auto flex-1 space-y-3 no-scrollbar bg-slate-50 dark:bg-[#0B1220] rounded-b-[2rem]">
+                                        {currentSelectedGroup.list?.map((item, idx) => (
+                                            <div key={idx} className="p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl flex justify-between items-center shadow-sm">
+                                                <div className="flex items-center gap-3 min-w-0">
+                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs shrink-0 ${item.isEquip || (item.itemStr && item.itemStr.includes('장비')) ? 'bg-amber-100 text-amber-500 dark:bg-amber-900/30' : 'bg-emerald-100 text-emerald-500 dark:bg-emerald-900/30'}`}>
+                                                        <i className={`fas ${item.isEquip || (item.itemStr && item.itemStr.includes('장비')) ? 'fa-khanda' : 'fa-gift'}`}></i>
+                                                    </div>
+                                                    <div className="truncate">
+                                                        <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mb-0.5">{item.winner}</div>
+                                                        <div className="text-sm font-black text-slate-800 dark:text-slate-100 truncate">
+                                                            <span className={item.itemStr?.includes('장비') ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}>{item.itemStr}</span>
+                                                            {item.qty && item.qty > 1 && <span className="ml-1 text-purple-500 text-[10px] font-mono">x{item.qty}</span>}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                {canEditLoot && (
+                                                    <div className="flex gap-2 shrink-0 ml-2">
+                                                        <button onClick={() => setEditLootItem({ docId: currentSelectedGroup.id, idx, ...item })} className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-500 hover:text-blue-500 flex items-center justify-center transition-colors"><i className="fas fa-edit"></i></button>
+                                                        <button onClick={() => handleDeleteLootItem(currentSelectedGroup.id, idx)} className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-500 hover:text-red-500 flex items-center justify-center transition-colors"><i className="fas fa-trash"></i></button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 분배 이력 수정 모달 (개별 건) */}
                         {editLootItem && canEditLoot && (
-                            <div className="fixed inset-0 z-[1400] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn text-slate-900 dark:text-white" onClick={() => setEditLootItem(null)}>
+                            <div className="fixed inset-0 z-[1500] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn text-slate-900 dark:text-white" onClick={() => setEditLootItem(null)}>
                                 <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl p-8 max-w-sm w-full border-t-[8px] border-emerald-500" onClick={e=>e.stopPropagation()}>
                                     <h3 className="text-lg font-black mb-6 flex items-center gap-2"><i className="fas fa-edit text-emerald-500"></i>분배 이력 수정</h3>
                                     <form onSubmit={handleUpdateLootItem} className="space-y-4">
                                         <div className="space-y-1">
                                             <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">닉네임</label>
-                                            <input type="text" className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl dark:bg-slate-800 text-sm outline-none focus:border-emerald-500 font-bold" value={editLootItem.winner} onChange={e => setEditLootItem({...editLootItem, winner: e.target.value})} required />
+                                            <input type="text" className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl dark:bg-slate-800 text-sm outline-none focus:border-emerald-500 font-bold text-slate-900 dark:text-white" value={editLootItem.winner} onChange={e => setEditLootItem({...editLootItem, winner: e.target.value})} required />
                                         </div>
                                         <div className="space-y-1">
                                             <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">보상 내용</label>
-                                            <input type="text" className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl dark:bg-slate-800 text-sm outline-none focus:border-emerald-500 font-bold" value={editLootItem.itemStr} onChange={e => setEditLootItem({...editLootItem, itemStr: e.target.value})} required />
+                                            <input type="text" className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl dark:bg-slate-800 text-sm outline-none focus:border-emerald-500 font-bold text-slate-900 dark:text-white" value={editLootItem.itemStr} onChange={e => setEditLootItem({...editLootItem, itemStr: e.target.value})} required />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">수량</label>
+                                            <input type="number" min="1" className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl dark:bg-slate-800 text-sm outline-none focus:border-emerald-500 font-bold font-mono text-slate-900 dark:text-white" value={editLootItem.qty || 1} onChange={e => setEditLootItem({...editLootItem, qty: Number(e.target.value) || 1})} required />
                                         </div>
                                         <div className="grid grid-cols-2 gap-3 pt-4">
                                             <button type="button" onClick={() => setEditLootItem(null)} className="py-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-black hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">취소</button>
