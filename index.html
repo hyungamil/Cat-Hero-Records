@@ -10,6 +10,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
         
@@ -68,10 +69,10 @@
 
     <script type="text/babel" data-type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp, deleteDoc, doc, updateDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        const firebaseConfig = {
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
             apiKey: "AIzaSyCOt_5hYk7Y9EDwo1Cd55et5-JT6k7LIcc",
             authDomain: "cat-hero-record.firebaseapp.com",
             projectId: "cat-hero-record",
@@ -100,12 +101,15 @@
             { id: 11, name: "길드의 자부심", score: 5000 }, { id: 12, name: "길드의 신", score: 10000 },
         ];
 
-        const REWARDS_LIST = ['레시피', '픽업', '룬 소환서', '특수룬 소환서', '동료 소환서'];
+        const EQUIP_GRADES = ['일반', '고급', '희귀', '영웅', '전설', '신화'];
+        const EQUIP_TYPES = ['반지', '목걸이', '모자', '장갑', '목도리', '신발', '목걸이 상자', '반지 상자'];
+        const RECIPE_GRADES = ['일반', '고급', '희귀', '영웅', '전설', '신화'];
+        
+        const REWARDS_LIST = ['픽업', '신화 픽업', '룬 소환서', '특수룬 소환서', '동료 소환서'];
         const MONSTERS = ["루이", "루니", "루나", "바나냥", "토끼", "꿀벌", "크랩", "해적보스", "고양이보스", "늑대보스", "음식보스"];
         const ZOOM_LEVELS = [50, 75, 90, 100, 110, 125, 150, 175, 200];
 
         function App() {
-            // ================== STATES ==================
             const [user, setUser] = useState(null);
             const [nickname, setNickname] = useState(localStorage.getItem('cat_hero_nickname') || '');
             const [isNameSet, setIsNameSet] = useState(!!localStorage.getItem('cat_hero_nickname'));
@@ -149,9 +153,13 @@
             
             const [basketItems, setBasketItems] = useState([]);
             const [customEquipments, setCustomEquipments] = useState([]);
-            const [equipType, setEquipType] = useState('모자');
-            const [equipGrade, setEquipGrade] = useState('흰색'); 
+            const [customRecipes, setCustomRecipes] = useState([]);
+            
+            const [equipType, setEquipType] = useState('반지');
+            const [equipGrade, setEquipGrade] = useState('일반'); 
             const [equipQty, setEquipQty] = useState('');
+            const [recipeGrade, setRecipeGrade] = useState('일반');
+            const [recipeQty, setRecipeQty] = useState('');
             
             const [distMonster, setDistMonster] = useState(''); 
             const [distResult, setDistResult] = useState(null);
@@ -159,24 +167,24 @@
             const captureRef = useRef(null);
             const ratioCaptureRef = useRef(null); 
 
-            // 수동 이력 추가 관련 상태
+            const [preventDupLoot, setPreventDupLoot] = useState(false);
+            const [newNicknameInput, setNewNicknameInput] = useState('');
+
             const [manualStagingList, setManualStagingList] = useState([]);
             const [manualLootMonster, setManualLootMonster] = useState('');
             const [manualLootItem, setManualLootItem] = useState('');
             const [manualLootWinner, setManualLootWinner] = useState('');
             const [manualLootQty, setManualLootQty] = useState(1);
             const [manualLootMemo, setManualLootMemo] = useState('');
-            const [manualLootGrade, setManualLootGrade] = useState('흰색'); 
-            const [manualEquipType, setManualEquipType] = useState('모자');
+            const [manualLootGrade, setManualLootGrade] = useState('일반'); 
+            const [manualEquipType, setManualEquipType] = useState('반지');
+            const [manualRecipeGrade, setManualRecipeGrade] = useState('일반');
             const [manualIsUnallocated, setManualIsUnallocated] = useState(false); 
             const [showManualLootForm, setShowManualLootForm] = useState(false);
             
-            const [lootSearch, setLootSearch] = useState('');
-            const [lootSort, setLootSort] = useState('desc');
             const [editLootItem, setEditLootItem] = useState(null);
             const [selectedLootGroupId, setSelectedLootGroupId] = useState(null); 
 
-            // 캘린더 상태
             const [currentMonth, setCurrentMonth] = useState(() => {
                 const now = new Date();
                 return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -186,7 +194,6 @@
                 return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
             });
 
-            // 애니메이션 및 관리자 상태
             const [isDistAnimating, setIsDistAnimating] = useState(false);
             const [tempDistList, setTempDistList] = useState([]);
             const [slotDisplayNames, setSlotDisplayNames] = useState([]);
@@ -292,7 +299,7 @@
 
             const handleResetSession = () => {
                 setUiConfirm({ 
-                    message: "길드원 정보를 초기화하고 이름 선택 화면으로 돌아가시겠습니까?", 
+                    message: "로그아웃하고 닉네임 선택 화면으로 돌아가시겠습니까?", 
                     onConfirm: () => { 
                         localStorage.removeItem('cat_hero_nickname'); 
                         setNickname(''); 
@@ -367,6 +374,59 @@
                 } catch(e) { showAlert("저장에 실패했습니다.", "error"); }
             };
 
+            const handleChangeNickname = async () => {
+                if (!newNicknameInput || newNicknameInput.trim() === '') return showAlert('새 닉네임을 입력해주세요.', 'error');
+                const targetName = newNicknameInput.trim();
+                if (targetName === nickname) return showAlert('현재 닉네임과 동일합니다.', 'error');
+                
+                if (members.find(m => m.name === targetName)) return showAlert('이미 존재하는 닉네임입니다. 다른 닉네임을 사용해주세요.', 'error');
+                
+                setUiConfirm({
+                    message: `[${nickname}] 에서 [${targetName}](으)로 닉네임을 변경하시겠습니까?\n변경 시 랭킹, 통계, 분배 이력 등 모든 데이터가 즉시 업데이트됩니다.`,
+                    onConfirm: async () => {
+                        try {
+                            const myMem = members.find(m => m.name === nickname);
+                            if (myMem) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', myMem.id), { name: targetName });
+
+                            const myLogs = logs.filter(l => l.nickname === nickname);
+                            for (const l of myLogs) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24', l.id), { nickname: targetName });
+
+                            const myLootDocs = lootLogs.filter(l => l.list?.some(i => i.winner === nickname));
+                            for (const l of myLootDocs) {
+                                const newList = l.list.map(item => item.winner === nickname ? { ...item, winner: targetName } : item);
+                                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'loot_history_v24', l.id), { list: newList });
+                            }
+
+                            let newFavs = [...favorites];
+                            if (newFavs.includes(nickname)) {
+                                newFavs = newFavs.map(f => f === nickname ? targetName : f);
+                                setFavorites(newFavs);
+                                localStorage.setItem('cat_hero_favorites', JSON.stringify(newFavs));
+                            }
+
+                            localStorage.setItem('cat_hero_nickname', targetName);
+                            setNickname(targetName);
+                            setNewNicknameInput('');
+                            showAlert(`성공적으로 닉네임이 [${targetName}](으)로 변경되었습니다!`);
+                        } catch (e) {
+                            console.error(e);
+                            showAlert('닉네임 변경 처리 중 오류가 발생했습니다.', 'error');
+                        }
+                    }
+                });
+            };
+
+            const handleAdminLogin = () => {
+                if (adminPass === "123456") {
+                    setIsAdminMode(true);
+                } else {
+                    setIsAdminMode(false);
+                }
+                setShowAdminEntry(false);
+                setAdminPass("");
+                setMainCategory('settings');
+            };
+
             const handleCaptureImage = () => {
                 if(!captureRef.current) return;
                 setTimeout(() => {
@@ -423,6 +483,7 @@
                         setDistResult(null);
                         setBasketItems([]);
                         setCustomEquipments([]);
+                        setCustomRecipes([]);
                         setIsDistAnimating(false);
                         setIsDistSaved(false);
                         if (isChecked) {
@@ -466,7 +527,17 @@
             }, [enableAnimation]);
 
             useEffect(() => {
-                const initAuth = async () => { try { await signInAnonymously(auth); } catch (e) { console.error(e); } };
+                const initAuth = async () => {
+                    try {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (e) {
+                        console.error("Auth init error:", e);
+                    }
+                };
                 initAuth();
                 const unsubscribe = onAuthStateChanged(auth, setUser);
                 return () => unsubscribe();
@@ -486,11 +557,11 @@
                             setMyMount(me.mount || '');
                         }
                     }
-                });
+                }, (error) => console.error(error));
 
                 const unsubLogs = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24'), (snapshot) => {
                     setLogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)));
-                });
+                }, (error) => console.error(error));
 
                 const unsubLoot = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'loot_history_v24'), (snapshot) => {
                     setLootLogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => {
@@ -498,11 +569,11 @@
                         const timeB = b.timestamp?.seconds ? b.timestamp.seconds * 1000 : new Date(b.timestamp).getTime();
                         return timeB - timeA;
                     }));
-                });
+                }, (error) => console.error(error));
 
                 const unsubSettings = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), (snapshot) => {
                     if (snapshot.exists()) setNotice(snapshot.data().notice || "");
-                });
+                }, (error) => console.error(error));
 
                 return () => { unsubMembers(); unsubLogs(); unsubLoot(); unsubSettings(); };
             }, [user, nickname]);
@@ -714,8 +785,11 @@
                 let finalItemStr = manualLootItem;
                 let isEquip = false;
                 if (manualLootItem === '장비') {
-                    finalItemStr = `[${manualLootGrade}] 장비(${manualEquipType})`;
+                    finalItemStr = `${manualLootGrade} ${manualEquipType}`;
                     isEquip = true;
+                } else if (manualLootItem === '레시피') {
+                    finalItemStr = `${manualRecipeGrade} 레시피`;
+                    isEquip = false;
                 }
                 
                 setManualStagingList(p => [...p, { 
@@ -891,46 +965,87 @@
                 } catch (err) { console.error("Failed to save history", err); }
             };
 
+            const getAlreadyWonPlayers = (itemStr) => {
+                const wonPlayers = new Set();
+                lootLogs.forEach(log => {
+                    log.list?.forEach(l => {
+                        if (l.itemStr === itemStr && l.winner) {
+                            wonPlayers.add(l.winner);
+                        }
+                    });
+                });
+                return wonPlayers;
+            };
+
             const executeDistribution = (type) => {
                 if(selectedCalcMembers.length === 0) return showAlert("참여 길드원이 없습니다.", "error");
-                if(basketItems.length === 0 && customEquipments.length === 0) return showAlert("등록된 보상이 없습니다.", "error");
+                if(basketItems.length === 0 && customEquipments.length === 0 && customRecipes.length === 0) return showAlert("등록된 보상이 없습니다.", "error");
 
                 let resultArr = [];
                 const pNames = selectedCalcMembers.map(id => members.find(m => m.id === id)?.name).filter(Boolean);
 
                 if (type === 'random') {
-                    const equipItem = basketItems.find(b => b.name === '장비');
-                    if (equipItem) {
-                        for(let i=0; i<equipItem.qty; i++){
-                            const winner = pNames[Math.floor(Math.random() * pNames.length)];
-                            resultArr.push({ itemStr: '장비', winner, isEquip: true, isRandom: true });
-                        }
-                    }
+                    let allItemsToDistribute = [];
                     customEquipments.forEach(eq => {
                         for(let i=0; i<eq.qty; i++){
-                            const winner = pNames[Math.floor(Math.random() * pNames.length)];
-                            const finalItemName = `[${eq.grade}] 장비(${eq.type})`;
-                            resultArr.push({ itemStr: finalItemName, winner, isEquip: true, isRandom: true });
+                            allItemsToDistribute.push({ name: `${eq.grade} ${eq.type}`, isEquip: true });
+                        }
+                    });
+                    customRecipes.forEach(rcp => {
+                        for(let i=0; i<rcp.qty; i++){
+                            allItemsToDistribute.push({ name: `${rcp.grade} 레시피`, isEquip: false });
+                        }
+                    });
+                    basketItems.forEach(item => {
+                        for(let i=0; i<item.qty; i++){
+                            allItemsToDistribute.push({ name: item.name, isEquip: false });
                         }
                     });
 
-                    basketItems.filter(b => b.name !== '장비').forEach(item => {
-                        const winner = pNames[Math.floor(Math.random() * pNames.length)];
-                        resultArr.push({ itemStr: `${item.name}`, winner, isEquip: false, isRandom: true });
+                    allItemsToDistribute.forEach(item => {
+                        let candidates = [...pNames];
+                        
+                        if (preventDupLoot && item.isEquip) {
+                            const wonHistory = getAlreadyWonPlayers(item.name);
+                            const wonCurrentSession = new Set(resultArr.filter(r => r.itemStr === item.name).map(r => r.winner));
+                            candidates = pNames.filter(name => !wonHistory.has(name) && !wonCurrentSession.has(name));
+                            if (candidates.length === 0) candidates = [...pNames];
+                        }
+
+                        const winner = candidates[Math.floor(Math.random() * candidates.length)];
+                        resultArr.push({ itemStr: item.name, winner, isEquip: item.isEquip, isRandom: true });
                     });
+
                 } else if (type === 'contrib') {
                     if(calcStrikeReport.individualReports.length === 0) return showAlert("격추 데이터가 없습니다.", "error");
                     
-                    let allItems = [];
-                    basketItems.forEach(b => { allItems.push({ name: b.name, qty: b.qty, isEquip: b.name === '장비' }); });
-                    customEquipments.forEach(eq => { allItems.push({ name: `[${eq.grade}] 장비(${eq.type})`, qty: eq.qty, isEquip: true }); });
+                    let allItemTypes = [];
+                    basketItems.forEach(b => { allItemTypes.push({ name: b.name, qty: b.qty, isEquip: false }); });
+                    customRecipes.forEach(rcp => { allItemTypes.push({ name: `${rcp.grade} 레시피`, qty: rcp.qty, isEquip: false }); });
+                    customEquipments.forEach(eq => { allItemTypes.push({ name: `${eq.grade} ${eq.type}`, qty: eq.qty, isEquip: true }); });
 
-                    allItems.forEach(item => {
+                    allItemTypes.forEach(item => {
                         let totalQty = item.qty;
+                        let validReports = calcStrikeReport.individualReports;
+
+                        if (preventDupLoot && item.isEquip) {
+                            const wonHistory = getAlreadyWonPlayers(item.name);
+                            validReports = validReports.filter(r => !wonHistory.has(r.name));
+                            if (validReports.length === 0) {
+                                validReports = calcStrikeReport.individualReports;
+                            } else {
+                                const subTotalGk = validReports.reduce((sum, r) => sum + r.gyeokchu, 0);
+                                validReports = validReports.map(r => ({
+                                    ...r,
+                                    rate: subTotalGk > 0 ? (r.gyeokchu / subTotalGk) * 100 : 0
+                                }));
+                            }
+                        }
+
                         let remain = totalQty;
                         let fractions = [];
                         
-                        calcStrikeReport.individualReports.forEach(r => {
+                        validReports.forEach(r => {
                             const alloc = totalQty * (r.rate / 100);
                             const base = Math.floor(alloc);
                             remain -= base;
@@ -1031,170 +1146,9 @@
                 return days;
             };
 
-            // ================== RENDER PAGE CONTENT ==================
             let pageContent;
 
-            if (isAdminMode) {
-                pageContent = (
-                    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 p-4 md:p-8 animate-fadeIn text-slate-900 dark:text-slate-100 font-bold pb-40">
-                        <div className="max-w-7xl mx-auto dashboard-card p-6 md:p-8 border-t-8 border-slate-800 shadow-2xl">
-                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4 border-b pb-6 dark:border-slate-700">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center text-slate-800 dark:text-slate-200 font-bold"><i className="fas fa-shield-alt"></i></div>
-                                    <h2 className="text-xl md:text-2xl font-black italic">관리 센터</h2>
-                                </div>
-                                <button onClick={() => setIsAdminMode(false)} className="px-6 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 rounded-xl font-black shadow-sm text-slate-900 dark:text-white uppercase text-xs">나가기</button>
-                            </div>
-                            
-                            <section className="dashboard-card p-5 border-l-[4px] border-purple-500 bg-purple-50/20 dark:bg-purple-900/10 mb-8">
-                                <h3 className="text-sm font-black mb-4 text-purple-600 dark:text-purple-400 flex items-center gap-2">
-                                    <i className="fas fa-users-cog"></i> 권한 관리
-                                </h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div>
-                                        <h4 className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 font-bold">현재 관리자 목록</h4>
-                                        <div className="flex flex-wrap gap-2">
-                                            {members.filter(m => m.isAdmin).map(m => (
-                                                <span key={m.id} className="text-[10px] bg-red-100 text-red-700 px-2 py-1 rounded shadow-sm font-black flex items-center gap-1 border border-red-200">
-                                                    👑 {m.name}
-                                                    <button onClick={() => handleAdminUpdateField(m.id, 'isAdmin', false)} className="ml-1 text-red-400 hover:text-red-900"><i className="fas fa-times"></i></button>
-                                                </span>
-                                            ))}
-                                            {members.filter(m => m.isAdmin).length === 0 && <span className="text-[10px] text-slate-400">등록된 관리자가 없습니다.</span>}
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <h4 className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 font-bold">현재 총무 목록</h4>
-                                        <div className="flex flex-wrap gap-2">
-                                            {members.filter(m => m.isManager && !m.isAdmin).map(m => (
-                                                <span key={m.id} className="text-[10px] bg-yellow-100 text-yellow-700 px-2 py-1 rounded shadow-sm font-black flex items-center gap-1 border border-yellow-200">
-                                                    ⭐ {m.name}
-                                                    <button onClick={() => handleAdminUpdateField(m.id, 'isManager', false)} className="ml-1 text-yellow-500 hover:text-yellow-900"><i className="fas fa-times"></i></button>
-                                                </span>
-                                            ))}
-                                            {members.filter(m => m.isManager && !m.isAdmin).length === 0 && <span className="text-[10px] text-slate-400">등록된 총무가 없습니다.</span>}
-                                        </div>
-                                    </div>
-                                </div>
-                            </section>
-
-                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                                <div className="space-y-8 lg:col-span-1">
-                                    <section>
-                                        <label className="text-[10px] text-slate-400 uppercase tracking-widest mb-3 block font-bold">전체 공지사항 (상단 노출)</label>
-                                        <div className="flex gap-2">
-                                            <input type="text" className="flex-1 p-3 border-2 border-slate-100 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm outline-none focus:border-blue-500" value={newNotice} onChange={e => setNewNotice(e.target.value)} placeholder="모든 길드원에게 노출될 공지사항" />
-                                            <button onClick={async () => { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { notice: newNotice }); showAlert("저장되었습니다."); }} className="px-5 bg-blue-600 text-white rounded-xl font-black shadow-lg hover:bg-blue-700 transition-colors">송출</button>
-                                        </div>
-                                    </section>
-                                    
-                                    <section>
-                                        <label className="text-[10px] text-slate-400 uppercase tracking-widest mb-3 block font-bold">데이터 관리 도구</label>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                            <button onClick={() => setUiConfirm({ message: "균격 기록을 삭제합니까?\n(랭킹 누적 포인트 및 시즌 통계는 안전하게 보존됩니다)", onConfirm: async () => { const snap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24')); for (const d of snap.docs) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24', d.id)); showAlert("기록이 초기화되었습니다."); } })} className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900 rounded-xl text-blue-600 dark:text-blue-400 text-xs font-black uppercase hover:bg-blue-100 transition-colors">기록(균격) 초기화</button>
-                                            <button onClick={() => setUiConfirm({ message: "랭킹 점수를 완전 초기화합니까?", onConfirm: async () => { for (const m of members) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', m.id), { rankingPoints: 0, rankingNormal: 0, rankingBoss: 0, score: 0 }); showAlert("점수가 0으로 초기화되었습니다."); } })} className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900 rounded-xl text-red-600 dark:text-red-400 text-xs font-black uppercase hover:bg-red-100 transition-colors">랭킹(점수) 초기화</button>
-                                        </div>
-                                    </section>
-                                    
-                                    <section className="dashboard-card p-5 border-l-[4px] border-amber-500 bg-amber-50/20 dark:bg-amber-900/10">
-                                        <h3 className="text-xs font-black mb-3 text-amber-600 dark:text-amber-400">길드원 추가</h3>
-                                        <div className="flex gap-2">
-                                            <input type="text" className="flex-1 p-3 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-amber-500 bg-white dark:bg-slate-900 text-sm" value={newMemberName} onChange={e => setNewMemberName(e.target.value)} placeholder="신규 닉네임" />
-                                            <button onClick={async () => { if(!newMemberName) return; await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'members_v24'), { name: newMemberName, score: 0 }); setNewMemberName(""); showAlert("추가되었습니다."); }} className="px-5 bg-slate-800 dark:bg-slate-700 text-white rounded-xl font-bold hover:bg-slate-900 transition-colors">등록</button>
-                                        </div>
-                                    </section>
-                                </div>
-                                
-                                <section className="lg:col-span-2 flex flex-col h-full min-h-[500px]">
-                                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-4 gap-4">
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] text-slate-400 uppercase tracking-widest block font-bold">인원 상세 정보 및 관리 ({members.length}명)</label>
-                                            <p className="text-[10px] text-slate-500">포인트나 스탯을 변경하면 자동으로 <strong className="text-blue-500">저장</strong>됩니다.</p>
-                                        </div>
-                                        <div className="flex gap-2 w-full sm:w-auto">
-                                            <select className="p-2 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:border-blue-500 bg-white dark:bg-slate-800 font-bold" value={adminSortType} onChange={e => setAdminSortType(e.target.value)}>
-                                                <option value="score">랭킹 점수순</option>
-                                                <option value="gyeokchu">누적 격추순</option>
-                                                <option value="latest">최근 참여순</option>
-                                                <option value="count">참여 횟수순</option>
-                                            </select>
-                                            <div className="relative flex-1">
-                                                <input type="text" value={adminSearch} onChange={e => setAdminSearch(e.target.value)} placeholder="🔍 길드원 이름 검색" className="w-full p-2 pl-8 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:border-blue-500 bg-white dark:bg-slate-800" />
-                                                <i className="fas fa-search absolute left-3 top-[10px] text-[10px] text-slate-400"></i>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex-1 overflow-y-auto border-2 border-slate-100 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-900 shadow-inner no-scrollbar">
-                                        {adminSortedMembers.map(m => {
-                                            const mStat = stats.playerMap[m.name] || {};
-                                            const isFav = favorites.includes(m.name);
-                                            const gyeokchu = getMemberGyeokchu(m);
-                                            const pts = m.rankingPoints !== undefined ? m.rankingPoints : (mStat.points || 0);
-
-                                            return (
-                                                <div key={m.id} className="p-4 md:p-5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b dark:border-slate-800 last:border-b-0 flex flex-col gap-4">
-                                                    <div className="flex justify-between items-start">
-                                                        <div className="flex items-center gap-3">
-                                                            <button onClick={(e) => toggleFavorite(e, m.name)} className="text-lg focus:outline-none">
-                                                                <i className={`fas fa-star ${isFav ? 'text-yellow-400' : 'text-slate-300 dark:text-slate-600'}`}></i>
-                                                            </button>
-                                                            <div>
-                                                                <div className="flex flex-wrap items-center gap-2 mb-1">
-                                                                    <span className="font-black text-blue-600 dark:text-blue-400 text-base">{m.name}</span>
-                                                                    {renderBadges(m)}
-                                                                </div>
-                                                                <div className="text-[10px] text-slate-500 flex flex-wrap items-center gap-2 mt-1 font-mono">
-                                                                    <span>참여: {m.rankingNormal !== undefined ? (m.rankingNormal + (m.rankingBoss||0)) : (mStat.swords || 0)}회</span>
-                                                                    <span>최근: {m.latestTime?.seconds ? new Date(m.latestTime.seconds * 1000).toLocaleDateString() : (mStat.latestTime ? new Date(mStat.latestTime * 1000).toLocaleDateString() : '없음')}</span>
-                                                                    
-                                                                    <div className="flex gap-1 ml-1">
-                                                                        <button 
-                                                                            onClick={() => handleAdminUpdateField(m.id, 'isManager', !m.isManager)}
-                                                                            className={`px-2 py-0.5 rounded text-[9px] font-black transition-colors ${m.isManager ? 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-red-500' : 'bg-purple-50 text-purple-600 hover:bg-purple-100 dark:bg-purple-900/30 dark:text-purple-400'}`}>
-                                                                            {m.isManager ? '총무 해제' : '총무 지정'}
-                                                                        </button>
-                                                                        <button 
-                                                                            onClick={() => handleAdminUpdateField(m.id, 'isAdmin', !m.isAdmin)}
-                                                                            className={`px-2 py-0.5 rounded text-[9px] font-black transition-colors ${m.isAdmin ? 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-red-500' : 'bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/30 dark:text-red-400'}`}>
-                                                                            {m.isAdmin ? '관리자 해제' : '관리자 지정'}
-                                                                        </button>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                        <button onClick={() => setUiConfirm({ message: `${m.name} 님을 길드에서 삭제합니까?`, onConfirm: async () => { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', m.id)); showAlert("삭제되었습니다."); } })} className="text-slate-400 hover:text-red-500 text-xs p-1 transition-colors shrink-0"><i className="fas fa-trash"></i></button>
-                                                    </div>
-                                                    
-                                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 dark:bg-slate-950/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
-                                                        <div className="flex flex-col gap-1">
-                                                            <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">스탯 <span className="text-slate-300 font-normal">(수식용)</span></span>
-                                                            <input type="number" className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-center dark:bg-slate-800 outline-none focus:border-blue-500 text-xs font-mono" defaultValue={m.stat||''} onBlur={(e) => handleAdminUpdateField(m.id, 'stat', e.target.value ? Number(e.target.value) : null)} onFocus={e=>e.target.select()} placeholder="값 입력" />
-                                                        </div>
-                                                        <div className="flex flex-col gap-1">
-                                                            <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">탈것 <span className="text-slate-300 font-normal">(수식용)</span></span>
-                                                            <input type="number" className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-center dark:bg-slate-800 outline-none focus:border-blue-500 text-xs font-mono" defaultValue={m.mount||''} onBlur={(e) => handleAdminUpdateField(m.id, 'mount', e.target.value ? Number(e.target.value) : null)} onFocus={e=>e.target.select()} placeholder="값 입력" />
-                                                        </div>
-                                                        <div className="flex flex-col gap-1">
-                                                            <span className="text-[10px] text-amber-500 uppercase font-bold tracking-wider">직접 격추 <span className="text-amber-300 font-normal">(최우선)</span></span>
-                                                            <input type="number" className="w-full p-2 border border-amber-200 dark:border-amber-900/50 bg-amber-50/30 rounded-lg text-center dark:bg-slate-800 text-amber-600 dark:text-amber-400 outline-none focus:border-amber-500 text-xs font-mono font-bold" defaultValue={m.directGyeokchu||''} onBlur={(e) => handleAdminUpdateField(m.id, 'directGyeokchu', e.target.value ? Number(e.target.value) : null)} onFocus={e=>e.target.select()} placeholder={gyeokchu > 0 ? `(${gyeokchu})` : '값 입력'} />
-                                                        </div>
-                                                        <div className="flex flex-col gap-1">
-                                                            <span className="text-[10px] text-blue-500 uppercase font-bold tracking-wider">누적 포인트 <span className="text-blue-300 font-normal">(조정 가능)</span></span>
-                                                            <input type="number" className="w-full p-2 border border-blue-200 dark:border-blue-900/50 bg-blue-50/30 rounded-lg text-center dark:bg-slate-800 text-blue-600 dark:text-blue-400 outline-none focus:border-blue-500 text-xs font-mono font-black" defaultValue={pts} onBlur={(e) => handleAdminUpdateField(m.id, 'rankingPoints', Number(e.target.value))} onFocus={e=>e.target.select()} placeholder="값 입력" />
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                        {adminSortedMembers.length === 0 && <div className="text-center py-10 text-slate-400 text-sm">검색 결과가 없습니다.</div>}
-                                    </div>
-                                </section>
-                            </div>
-                        </div>
-                    </div>
-                );
-            } else if (!isNameSet) {
+            if (!isNameSet) {
                 pageContent = (
                     <div className="min-h-screen flex flex-col p-4 bg-slate-200 dark:bg-slate-950 transition-colors pb-40">
                         {notice && (
@@ -1218,7 +1172,6 @@
                                         ))}
                                     </select>
                                     <button onClick={() => { if(nickname) { localStorage.setItem('cat_hero_nickname', nickname); setIsNameSet(true); } }} className="w-full bg-blue-600 text-white font-black py-4 rounded-xl shadow-lg hover:bg-blue-700 active:scale-95 transition-all text-lg">대시보드 접속</button>
-                                    <button onClick={() => setShowAdminEntry(true)} className="w-full text-center text-[10px] text-slate-400 font-bold uppercase mt-6 hover:text-blue-500 transition-colors">Administrator Portal</button>
                                 </div>
                             </div>
                         </div>
@@ -1285,6 +1238,189 @@
                         )}
 
                         <main className="p-4 md:p-8">
+                            {mainCategory === 'settings' && (
+                                <div className="animate-fadeIn">
+                                    <div className="max-w-4xl mx-auto dashboard-card p-6 md:p-8 border-t-8 border-slate-800 shadow-2xl">
+                                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4 border-b pb-6 dark:border-slate-700">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center text-slate-800 dark:text-slate-200 font-bold"><i className="fas fa-cog"></i></div>
+                                                <h2 className="text-xl md:text-2xl font-black italic">설정 {isAdminMode ? '& 관리 센터' : ''}</h2>
+                                            </div>
+                                        </div>
+
+                                        <section className="dashboard-card p-5 border-l-[4px] border-blue-500 bg-blue-50/20 dark:bg-blue-900/10 mb-8">
+                                            <h3 className="text-sm font-black mb-4 text-blue-600 dark:text-blue-400 flex items-center gap-2">
+                                                <i className="fas fa-id-badge"></i> 내 정보 (닉네임 변경)
+                                            </h3>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
+                                                <div>
+                                                    <label className="text-[10px] text-slate-500 font-bold uppercase mb-2 block">현재 닉네임</label>
+                                                    <div className="text-lg font-black text-slate-800 dark:text-slate-100 mb-2">{nickname}</div>
+                                                    <p className="text-[10px] text-red-500 dark:text-red-400 font-bold">* 변경 시 랭킹, 분배 이력 등 길드 내 모든 기록이 새 닉네임으로 일괄 교체됩니다.</p>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <input type="text" className="flex-1 p-3 border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white outline-none focus:border-blue-500" placeholder="새로운 닉네임을 입력하세요" value={newNicknameInput} onChange={e => setNewNicknameInput(e.target.value)} />
+                                                    <button onClick={handleChangeNickname} className="px-5 bg-blue-600 text-white font-black rounded-xl shadow-md hover:bg-blue-700 transition-colors whitespace-nowrap">닉네임 변경</button>
+                                                </div>
+                                            </div>
+                                        </section>
+
+                                        {isAdminMode && (
+                                            <div className="mt-10 space-y-8 pt-8 border-t border-slate-200 dark:border-slate-700">
+                                                <h3 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
+                                                    <i className="fas fa-shield-alt text-slate-500"></i> 관리자 도구
+                                                </h3>
+                                                <section className="dashboard-card p-5 border-l-[4px] border-purple-500 bg-purple-50/20 dark:bg-purple-900/10 mb-8">
+                                                    <h3 className="text-sm font-black mb-4 text-purple-600 dark:text-purple-400 flex items-center gap-2">
+                                                        <i className="fas fa-users-cog"></i> 권한 관리
+                                                    </h3>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                        <div>
+                                                            <h4 className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 font-bold">현재 관리자 목록</h4>
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {members.filter(m => m.isAdmin).map(m => (
+                                                                    <span key={m.id} className="text-[10px] bg-red-100 text-red-700 px-2 py-1 rounded shadow-sm font-black flex items-center gap-1 border border-red-200">
+                                                                        👑 {m.name}
+                                                                        <button onClick={() => handleAdminUpdateField(m.id, 'isAdmin', false)} className="ml-1 text-red-400 hover:text-red-900"><i className="fas fa-times"></i></button>
+                                                                    </span>
+                                                                ))}
+                                                                {members.filter(m => m.isAdmin).length === 0 && <span className="text-[10px] text-slate-400">등록된 관리자가 없습니다.</span>}
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 font-bold">현재 총무 목록</h4>
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {members.filter(m => m.isManager && !m.isAdmin).map(m => (
+                                                                    <span key={m.id} className="text-[10px] bg-yellow-100 text-yellow-700 px-2 py-1 rounded shadow-sm font-black flex items-center gap-1 border border-yellow-200">
+                                                                        ⭐ {m.name}
+                                                                        <button onClick={() => handleAdminUpdateField(m.id, 'isManager', false)} className="ml-1 text-yellow-500 hover:text-yellow-900"><i className="fas fa-times"></i></button>
+                                                                    </span>
+                                                                ))}
+                                                                {members.filter(m => m.isManager && !m.isAdmin).length === 0 && <span className="text-[10px] text-slate-400">등록된 총무가 없습니다.</span>}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </section>
+
+                                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                                                    <div className="space-y-8 lg:col-span-1">
+                                                        <section>
+                                                            <label className="text-[10px] text-slate-400 uppercase tracking-widest mb-3 block font-bold">전체 공지사항 (상단 노출)</label>
+                                                            <div className="flex gap-2">
+                                                                <input type="text" className="flex-1 p-3 border-2 border-slate-100 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm outline-none focus:border-blue-500" value={newNotice} onChange={e => setNewNotice(e.target.value)} placeholder="모든 길드원에게 노출될 공지사항" />
+                                                                <button onClick={async () => { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { notice: newNotice }); showAlert("저장되었습니다."); }} className="px-5 bg-blue-600 text-white rounded-xl font-black shadow-lg hover:bg-blue-700 transition-colors">송출</button>
+                                                            </div>
+                                                        </section>
+                                                        
+                                                        <section>
+                                                            <label className="text-[10px] text-slate-400 uppercase tracking-widest mb-3 block font-bold">데이터 관리 도구</label>
+                                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                                <button onClick={() => setUiConfirm({ message: "균격 기록을 삭제합니까?\n(랭킹 누적 포인트 및 시즌 통계는 안전하게 보존됩니다)", onConfirm: async () => { const snap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24')); for (const d of snap.docs) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24', d.id)); showAlert("기록이 초기화되었습니다."); } })} className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900 rounded-xl text-blue-600 dark:text-blue-400 text-xs font-black uppercase hover:bg-blue-100 transition-colors">기록(균격) 초기화</button>
+                                                                <button onClick={() => setUiConfirm({ message: "랭킹 점수를 완전 초기화합니까?", onConfirm: async () => { for (const m of members) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', m.id), { rankingPoints: 0, rankingNormal: 0, rankingBoss: 0, score: 0 }); showAlert("점수가 0으로 초기화되었습니다."); } })} className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900 rounded-xl text-red-600 dark:text-red-400 text-xs font-black uppercase hover:bg-red-100 transition-colors">랭킹(점수) 초기화</button>
+                                                            </div>
+                                                        </section>
+                                                        
+                                                        <section className="dashboard-card p-5 border-l-[4px] border-amber-500 bg-amber-50/20 dark:bg-amber-900/10">
+                                                            <h3 className="text-xs font-black mb-3 text-amber-600 dark:text-amber-400">길드원 추가</h3>
+                                                            <div className="flex gap-2">
+                                                                <input type="text" className="flex-1 p-3 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-amber-500 bg-white dark:bg-slate-900 text-sm" value={newMemberName} onChange={e => setNewMemberName(e.target.value)} placeholder="신규 닉네임" />
+                                                                <button onClick={async () => { if(!newMemberName) return; await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'members_v24'), { name: newMemberName, score: 0 }); setNewMemberName(""); showAlert("추가되었습니다."); }} className="px-5 bg-slate-800 dark:bg-slate-700 text-white rounded-xl font-bold hover:bg-slate-900 transition-colors">등록</button>
+                                                            </div>
+                                                        </section>
+                                                    </div>
+                                                    
+                                                    <section className="lg:col-span-2 flex flex-col h-full min-h-[500px]">
+                                                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-4 gap-4">
+                                                            <div className="space-y-1">
+                                                                <label className="text-[10px] text-slate-400 uppercase tracking-widest block font-bold">인원 상세 정보 및 관리 ({members.length}명)</label>
+                                                                <p className="text-[10px] text-slate-500">포인트나 스탯을 변경하면 자동으로 <strong className="text-blue-500">저장</strong>됩니다.</p>
+                                                            </div>
+                                                            <div className="flex gap-2 w-full sm:w-auto">
+                                                                <select className="p-2 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:border-blue-500 bg-white dark:bg-slate-800 font-bold" value={adminSortType} onChange={e => setAdminSortType(e.target.value)}>
+                                                                    <option value="score">랭킹 점수순</option>
+                                                                    <option value="gyeokchu">누적 격추순</option>
+                                                                    <option value="latest">최근 참여순</option>
+                                                                    <option value="count">참여 횟수순</option>
+                                                                </select>
+                                                                <div className="relative flex-1">
+                                                                    <input type="text" value={adminSearch} onChange={e => setAdminSearch(e.target.value)} placeholder="🔍 길드원 이름 검색" className="w-full p-2 pl-8 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:border-blue-500 bg-white dark:bg-slate-800" />
+                                                                    <i className="fas fa-search absolute left-3 top-[10px] text-[10px] text-slate-400"></i>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="flex-1 overflow-y-auto border-2 border-slate-100 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-900 shadow-inner no-scrollbar">
+                                                            {adminSortedMembers.map(m => {
+                                                                const mStat = stats.playerMap[m.name] || {};
+                                                                const isFav = favorites.includes(m.name);
+                                                                const gyeokchu = getMemberGyeokchu(m);
+                                                                const pts = m.rankingPoints !== undefined ? m.rankingPoints : (mStat.points || 0);
+
+                                                                return (
+                                                                    <div key={m.id} className="p-4 md:p-5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b dark:border-slate-800 last:border-b-0 flex flex-col gap-4">
+                                                                        <div className="flex justify-between items-start">
+                                                                            <div className="flex items-center gap-3">
+                                                                                <button onClick={(e) => toggleFavorite(e, m.name)} className="text-lg focus:outline-none">
+                                                                                    <i className={`fas fa-star ${isFav ? 'text-yellow-400' : 'text-slate-300 dark:text-slate-600'}`}></i>
+                                                                                </button>
+                                                                                <div>
+                                                                                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                                                                                        <span className="font-black text-blue-600 dark:text-blue-400 text-base">{m.name}</span>
+                                                                                        {renderBadges(m)}
+                                                                                    </div>
+                                                                                    <div className="text-[10px] text-slate-500 flex flex-wrap items-center gap-2 mt-1 font-mono">
+                                                                                        <span>참여: {m.rankingNormal !== undefined ? (m.rankingNormal + (m.rankingBoss||0)) : (mStat.swords || 0)}회</span>
+                                                                                        <span>최근: {m.latestTime?.seconds ? new Date(m.latestTime.seconds * 1000).toLocaleDateString() : (mStat.latestTime ? new Date(mStat.latestTime * 1000).toLocaleDateString() : '없음')}</span>
+                                                                                        
+                                                                                        <div className="flex gap-1 ml-1">
+                                                                                            <button 
+                                                                                                onClick={() => handleAdminUpdateField(m.id, 'isManager', !m.isManager)}
+                                                                                                className={`px-2 py-0.5 rounded text-[9px] font-black transition-colors ${m.isManager ? 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-red-500' : 'bg-purple-50 text-purple-600 hover:bg-purple-100 dark:bg-purple-900/30 dark:text-purple-400'}`}>
+                                                                                                {m.isManager ? '총무 해제' : '총무 지정'}
+                                                                                            </button>
+                                                                                            <button 
+                                                                                                onClick={() => handleAdminUpdateField(m.id, 'isAdmin', !m.isAdmin)}
+                                                                                                className={`px-2 py-0.5 rounded text-[9px] font-black transition-colors ${m.isAdmin ? 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-red-500' : 'bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/30 dark:text-red-400'}`}>
+                                                                                                {m.isAdmin ? '관리자 해제' : '관리자 지정'}
+                                                                                            </button>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                            <button onClick={() => setUiConfirm({ message: `${m.name} 님을 길드에서 삭제합니까?`, onConfirm: async () => { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', m.id)); showAlert("삭제되었습니다."); } })} className="text-slate-400 hover:text-red-500 text-xs p-1 transition-colors shrink-0"><i className="fas fa-trash"></i></button>
+                                                                        </div>
+                                                                        
+                                                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 dark:bg-slate-950/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
+                                                                            <div className="flex flex-col gap-1">
+                                                                                <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">스탯 <span className="text-slate-300 font-normal">(수식용)</span></span>
+                                                                                <input type="number" className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-center dark:bg-slate-800 outline-none focus:border-blue-500 text-xs font-mono" defaultValue={m.stat||''} onBlur={(e) => handleAdminUpdateField(m.id, 'stat', e.target.value ? Number(e.target.value) : null)} onFocus={e=>e.target.select()} placeholder="값 입력" />
+                                                                            </div>
+                                                                            <div className="flex flex-col gap-1">
+                                                                                <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">탈것 <span className="text-slate-300 font-normal">(수식용)</span></span>
+                                                                                <input type="number" className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-center dark:bg-slate-800 outline-none focus:border-blue-500 text-xs font-mono" defaultValue={m.mount||''} onBlur={(e) => handleAdminUpdateField(m.id, 'mount', e.target.value ? Number(e.target.value) : null)} onFocus={e=>e.target.select()} placeholder="값 입력" />
+                                                                            </div>
+                                                                            <div className="flex flex-col gap-1">
+                                                                                <span className="text-[10px] text-amber-500 uppercase font-bold tracking-wider">직접 격추 <span className="text-amber-300 font-normal">(최우선)</span></span>
+                                                                                <input type="number" className="w-full p-2 border border-amber-200 dark:border-amber-900/50 bg-amber-50/30 rounded-lg text-center dark:bg-slate-800 text-amber-600 dark:text-amber-400 outline-none focus:border-amber-500 text-xs font-mono font-bold" defaultValue={m.directGyeokchu||''} onBlur={(e) => handleAdminUpdateField(m.id, 'directGyeokchu', e.target.value ? Number(e.target.value) : null)} onFocus={e=>e.target.select()} placeholder={gyeokchu > 0 ? `(${gyeokchu})` : '값 입력'} />
+                                                                            </div>
+                                                                            <div className="flex flex-col gap-1">
+                                                                                <span className="text-[10px] text-blue-500 uppercase font-bold tracking-wider">누적 포인트 <span className="text-blue-300 font-normal">(조정 가능)</span></span>
+                                                                                <input type="number" className="w-full p-2 border border-blue-200 dark:border-blue-900/50 bg-blue-50/30 rounded-lg text-center dark:bg-slate-800 text-blue-600 dark:text-blue-400 outline-none focus:border-blue-500 text-xs font-mono font-black" defaultValue={pts} onBlur={(e) => handleAdminUpdateField(m.id, 'rankingPoints', Number(e.target.value))} onFocus={e=>e.target.select()} placeholder="값 입력" />
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                            {adminSortedMembers.length === 0 && <div className="text-center py-10 text-slate-400 text-sm">검색 결과가 없습니다.</div>}
+                                                        </div>
+                                                    </section>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
                             {mainCategory === 'conquest' && (
                                 <div className="flex flex-col gap-6">
                                     <div className="desktop-layout">
@@ -1654,10 +1790,10 @@
                                                     )}
                                                 </div>
 
-                                                <div className="space-y-4 border-t border-slate-100 dark:border-slate-800 pt-6">
-                                                    <label className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-widest block font-bold">1단계: 보상 종류 및 수량 선택</label>
+                                                <div className="space-y-4 pt-6 border-t border-slate-100 dark:border-slate-800">
+                                                    <label className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-widest block font-bold">1단계: 보상 종류 및 수량 선택 (기타 보상)</label>
                                                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                                                        {['장비', ...REWARDS_LIST].map(rName => {
+                                                        {REWARDS_LIST.map(rName => {
                                                             const existing = basketItems.find(b => b.name === rName);
                                                             const isChecked = !!existing;
                                                             return (
@@ -1683,29 +1819,50 @@
                                                     </div>
                                                     
                                                     <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center gap-3">
-                                                        <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 shrink-0">장비 상세 지정 (선택사항)</span>
-                                                        <div className="flex gap-2 w-full sm:w-auto">
+                                                        <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 shrink-0">장비 상세 지정 (필수 추가)</span>
+                                                        <div className="flex gap-2 w-full sm:w-auto flex-wrap">
                                                             <select className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:border-emerald-500 font-bold" value={equipGrade} onChange={e => setEquipGrade(e.target.value)}>
-                                                                <option value="흰색">흰색</option><option value="초록색">초록색</option><option value="파란색">파란색</option><option value="보라색">보라색</option><option value="전설">전설</option>
+                                                                {EQUIP_GRADES.map(g => <option key={g} value={g}>{g}</option>)}
                                                             </select>
                                                             <select className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:border-emerald-500 font-bold" value={equipType} onChange={e => setEquipType(e.target.value)}>
-                                                                <option value="모자">모자</option><option value="신발">신발</option><option value="장갑">장갑</option><option value="목도리">목도리</option>
+                                                                {EQUIP_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                                                             </select>
                                                             <input type="number" min="1" className="w-16 p-2 text-xs font-mono border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-center outline-none focus:border-emerald-500 text-slate-900 dark:text-white" placeholder="수량" value={equipQty} onFocus={e=>e.target.select()} onChange={e => setEquipQty(e.target.value)} />
                                                             <button onClick={() => {
                                                                 const val = Math.max(1, Number(equipQty) || 1);
                                                                 setCustomEquipments(p => [...p, { type: equipType, grade: equipGrade, qty: val }]);
                                                                 setEquipQty('');
-                                                            }} className="px-3 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-[10px] font-black hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors shrink-0">+ 장비 추가</button>
+                                                            }} className="px-3 py-2 sm:py-0 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-[10px] font-black hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors shrink-0">+ 장비 추가</button>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center gap-3 mt-3">
+                                                        <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 shrink-0">레시피 상세 지정 (선택사항)</span>
+                                                        <div className="flex gap-2 w-full sm:w-auto flex-wrap">
+                                                            <select className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:border-emerald-500 font-bold" value={recipeGrade} onChange={e => setRecipeGrade(e.target.value)}>
+                                                                {RECIPE_GRADES.map(g => <option key={g} value={g}>{g}</option>)}
+                                                            </select>
+                                                            <input type="number" min="1" className="w-16 p-2 text-xs font-mono border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-center outline-none focus:border-emerald-500 text-slate-900 dark:text-white" placeholder="수량" value={recipeQty} onFocus={e=>e.target.select()} onChange={e => setRecipeQty(e.target.value)} />
+                                                            <button onClick={() => {
+                                                                const val = Math.max(1, Number(recipeQty) || 1);
+                                                                setCustomRecipes(p => [...p, { grade: recipeGrade, qty: val }]);
+                                                                setRecipeQty('');
+                                                            }} className="px-3 py-2 sm:py-0 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-[10px] font-black hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors shrink-0">+ 레시피 추가</button>
                                                         </div>
                                                     </div>
                                                     
-                                                    {customEquipments.length > 0 && (
+                                                    {(customEquipments.length > 0 || customRecipes.length > 0) && (
                                                         <div className="flex flex-wrap gap-2 mt-2">
                                                             {customEquipments.map((eq, idx) => (
-                                                                <span key={idx} className="text-[10px] font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1 rounded-lg text-slate-700 dark:text-slate-300 flex items-center gap-1.5 shadow-sm">
-                                                                    [{eq.grade}] 장비({eq.type}) x{eq.qty}
+                                                                <span key={`eq-${idx}`} className="text-[10px] font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1 rounded-lg text-slate-700 dark:text-slate-300 flex items-center gap-1.5 shadow-sm">
+                                                                    {eq.grade} {eq.type} x{eq.qty}
                                                                     <button onClick={() => setCustomEquipments(p => p.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 ml-1"><i className="fas fa-times"></i></button>
+                                                                </span>
+                                                            ))}
+                                                            {customRecipes.map((rcp, idx) => (
+                                                                <span key={`rcp-${idx}`} className="text-[10px] font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1 rounded-lg text-slate-700 dark:text-slate-300 flex items-center gap-1.5 shadow-sm">
+                                                                    {rcp.grade} 레시피 x{rcp.qty}
+                                                                    <button onClick={() => setCustomRecipes(p => p.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 ml-1"><i className="fas fa-times"></i></button>
                                                                 </span>
                                                             ))}
                                                         </div>
@@ -1713,12 +1870,18 @@
                                                 </div>
 
                                                 <div className="space-y-4 pt-6 border-t border-slate-100 dark:border-slate-800 relative">
-                                                    <div className="flex justify-between items-center mb-2">
-                                                        <label className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-widest font-bold">2단계: 보상 분배 모드 선택</label>
-                                                        <label className="text-[10px] text-slate-500 font-bold cursor-pointer flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-md">
-                                                            <input type="checkbox" className="w-3 h-3 accent-blue-500" checked={enableAnimation} onChange={e => setEnableAnimation(e.target.checked)} />
-                                                            애니메이션 효과 사용
-                                                        </label>
+                                                    <div className="flex justify-between items-start flex-col md:flex-row gap-4 mb-2">
+                                                        <label className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-widest font-bold">2단계: 보상 분배 모드 및 조건 선택</label>
+                                                        <div className="flex flex-col gap-2 w-full md:w-auto">
+                                                            <label className="text-[10px] text-slate-500 font-bold cursor-pointer flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-lg">
+                                                                <input type="checkbox" className="w-4 h-4 accent-blue-500" checked={enableAnimation} onChange={e => setEnableAnimation(e.target.checked)} />
+                                                                애니메이션 효과 사용
+                                                            </label>
+                                                            <label className="text-[10px] text-amber-600 dark:text-amber-400 font-bold cursor-pointer flex items-center gap-1.5 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-800/50">
+                                                                <input type="checkbox" className="w-4 h-4 accent-amber-500" checked={preventDupLoot} onChange={e => setPreventDupLoot(e.target.checked)} />
+                                                                장비 중복 획득 방지 (기존 획득자 제외)
+                                                            </label>
+                                                        </div>
                                                     </div>
                                                     
                                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1985,7 +2148,8 @@
                                                             <label className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase">보상 종류 (필수)</label>
                                                             <select className="w-full p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-emerald-500 text-xs font-bold text-slate-900 dark:text-white" value={manualLootItem} onChange={e => setManualLootItem(e.target.value)}>
                                                                 <option value="">보상 선택 ▼</option>
-                                                                <option value="장비">장비</option>
+                                                                <option value="장비">장비 (상세 지정)</option>
+                                                                <option value="레시피">레시피 (상세 지정)</option>
                                                                 {REWARDS_LIST.map(r => <option key={r} value={r}>{r}</option>)}
                                                             </select>
                                                         </div>
@@ -1995,16 +2159,24 @@
                                                                 <div className="space-y-1">
                                                                     <label className="text-[10px] text-amber-600 dark:text-amber-400 font-bold uppercase">장비 등급</label>
                                                                     <select className="w-full p-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl outline-none focus:border-amber-500 text-xs font-bold text-amber-700 dark:text-amber-300" value={manualLootGrade} onChange={e => setManualLootGrade(e.target.value)}>
-                                                                        <option value="흰색">흰색</option><option value="초록색">초록색</option><option value="파란색">파란색</option><option value="보라색">보라색</option><option value="전설">전설</option>
+                                                                        {EQUIP_GRADES.map(g => <option key={g} value={g}>{g}</option>)}
                                                                     </select>
                                                                 </div>
                                                                 <div className="space-y-1">
                                                                     <label className="text-[10px] text-amber-600 dark:text-amber-400 font-bold uppercase">장비 부위</label>
                                                                     <select className="w-full p-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl outline-none focus:border-amber-500 text-xs font-bold text-amber-700 dark:text-amber-300" value={manualEquipType} onChange={e => setManualEquipType(e.target.value)}>
-                                                                        <option value="모자">모자</option><option value="신발">신발</option><option value="장갑">장갑</option><option value="목도리">목도리</option>
+                                                                        {EQUIP_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                                                                     </select>
                                                                 </div>
                                                             </>
+                                                        )}
+                                                        {manualLootItem === '레시피' && (
+                                                            <div className="space-y-1">
+                                                                <label className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase">레시피 등급</label>
+                                                                <select className="w-full p-2.5 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700 rounded-xl outline-none focus:border-emerald-500 text-xs font-bold text-emerald-700 dark:text-emerald-300" value={manualRecipeGrade} onChange={e => setManualRecipeGrade(e.target.value)}>
+                                                                    {RECIPE_GRADES.map(g => <option key={g} value={g}>{g}</option>)}
+                                                                </select>
+                                                            </div>
                                                         )}
                                                         <div className="space-y-1">
                                                             <label className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase">수량</label>
@@ -2387,20 +2559,21 @@
                         </div>
                     )}
 
-                    {/* 공통 컴포넌트: 관리자 로그인 */}
+                    {/* 공통 컴포넌트: 보안 및 설정 인증 (코드 입력 모달) */}
                     {showAdminEntry && (
                         <div className="fixed inset-0 z-[1200] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn font-bold">
                             <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl p-8 md:p-10 max-w-sm w-full border-t-[8px] border-slate-800 text-center">
                                 <div className="mb-8">
                                     <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-800 dark:text-slate-300 text-xl"><i className="fas fa-lock"></i></div>
-                                    <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1">보안 인증</p>
-                                    <h3 className="text-xl font-black text-slate-900 dark:text-white">관리자 코드 입력</h3>
+                                    <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1">설정 및 보안 인증</p>
+                                    <h3 className="text-xl font-black text-slate-900 dark:text-white">접속 코드 입력</h3>
+                                    <p className="text-[10px] text-slate-400 mt-2">* 일반 길드원은 비워두고 확인을 누르세요.</p>
                                 </div>
                                 <div className="flex flex-col gap-4">
-                                    <input type="password" autoFocus placeholder="Passkey" className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-4 text-center text-xl outline-none focus:border-slate-500 text-slate-900 dark:text-white font-black tracking-widest" value={adminPass} onChange={e => setAdminPass(e.target.value)} onKeyDown={e => { if(e.key === 'Enter' && adminPass === "123456") { setIsAdminMode(true); setShowAdminEntry(false); setAdminPass(""); } }} />
+                                    <input type="password" autoFocus placeholder="Passkey (선택)" className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-4 text-center text-xl outline-none focus:border-slate-500 text-slate-900 dark:text-white font-black tracking-widest" value={adminPass} onChange={e => setAdminPass(e.target.value)} onKeyDown={e => { if(e.key === 'Enter') handleAdminLogin(); }} />
                                     <div className="grid grid-cols-2 gap-3 mt-2">
                                         <button onClick={() => { setShowAdminEntry(false); setAdminPass(""); }} className="py-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-2xl font-bold transition-colors">취소</button>
-                                        <button onClick={() => { if(adminPass === "123456") { setIsAdminMode(true); setShowAdminEntry(false); setAdminPass(""); } else { showAlert("비밀번호 오류", "error"); } }} className="py-4 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white rounded-2xl font-bold shadow-lg transition-colors">인증</button>
+                                        <button onClick={handleAdminLogin} className="py-4 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white rounded-2xl font-bold shadow-lg transition-colors">확인</button>
                                     </div>
                                 </div>
                             </div>
