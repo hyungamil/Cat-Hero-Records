@@ -4,8 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>길드 통합 관리 시스템</title>
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- React 및 JSX Runtime을 위한 Import Map 선언 (흰 화면 에러 해결 핵심 로직) -->
+    <script type="importmap">
+    {
+        "imports": {
+            "react": "https://esm.sh/react@18.2.0",
+            "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+            "react/jsx-runtime": "https://esm.sh/react@18.2.0/jsx-runtime"
+        }
+    }
+    </script>
+    
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -68,11 +78,25 @@
     <div id="root"></div>
 
     <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useMemo, useRef } from "react";
+        import { createRoot } from "react-dom/client";
+        
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp, deleteDoc, doc, updateDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // setDoc이 추가되었습니다 (설정 저장 기능 오류 수정)
+        import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp, deleteDoc, doc, updateDoc, getDocs, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+        // Firebase 설정 안전하게 파싱하기
+        let parsedFirebaseConfig = null;
+        try {
+            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                parsedFirebaseConfig = JSON.parse(__firebase_config);
+            }
+        } catch (e) {
+            console.error("Firebase 설정 파싱 오류:", e);
+        }
+
+        const firebaseConfig = parsedFirebaseConfig || {
             apiKey: "AIzaSyCOt_5hYk7Y9EDwo1Cd55et5-JT6k7LIcc",
             authDomain: "cat-hero-record.firebaseapp.com",
             projectId: "cat-hero-record",
@@ -86,7 +110,24 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        const { useState, useEffect, useMemo, useRef } = React;
+        const safeGetItem = (key, defaultValue) => {
+            try { return localStorage.getItem(key) || defaultValue; } 
+            catch (e) { return defaultValue; }
+        };
+        const safeGetJSON = (key, defaultValue) => {
+            try { 
+                const item = localStorage.getItem(key);
+                if (!item || item === "undefined") return defaultValue;
+                return JSON.parse(item);
+            } 
+            catch (e) { return defaultValue; }
+        };
+        const safeSetItem = (key, value) => {
+            try { localStorage.setItem(key, value); } catch (e) { console.error("스토리지 저장 실패", e); }
+        };
+        const safeRemoveItem = (key) => {
+            try { localStorage.removeItem(key); } catch (e) {}
+        };
 
         const TOTAL_RESOURCES = 10; 
         const BASE_TIME_PER_SWORD = 2; 
@@ -111,14 +152,17 @@
 
         function App() {
             const [user, setUser] = useState(null);
-            const [nickname, setNickname] = useState(localStorage.getItem('cat_hero_nickname') || '');
-            const [isNameSet, setIsNameSet] = useState(!!localStorage.getItem('cat_hero_nickname'));
+            
+            const [nickname, setNickname] = useState(() => safeGetItem('cat_hero_nickname', ''));
+            const [isNameSet, setIsNameSet] = useState(() => !!safeGetItem('cat_hero_nickname', ''));
+            const [themeMode, setThemeMode] = useState(() => safeGetItem('cat_hero_theme', 'system'));
+            const [zoomIndex, setZoomIndex] = useState(() => Number(safeGetItem('cat_hero_zoom', 3)));
+            const [favorites, setFavorites] = useState(() => safeGetJSON('cat_hero_favorites', []));
+            const [enableAnimation, setEnableAnimation] = useState(() => safeGetItem('cat_hero_enable_anim', 'true') !== 'false');
+
             const [isAdminMode, setIsAdminMode] = useState(false);
             const [adminPass, setAdminPass] = useState("");
             const [showAdminEntry, setShowAdminEntry] = useState(false);
-            
-            const [themeMode, setThemeMode] = useState(localStorage.getItem('cat_hero_theme') || 'system');
-            const [zoomIndex, setZoomIndex] = useState(() => Number(localStorage.getItem('cat_hero_zoom') || 3));
 
             const [mainCategory, setMainCategory] = useState('conquest'); 
             const [conquestFilter, setConquestFilter] = useState('timeSort');
@@ -138,8 +182,6 @@
             
             const [myStat, setMyStat] = useState("");
             const [myMount, setMyMount] = useState("");
-
-            const [favorites, setFavorites] = useState(JSON.parse(localStorage.getItem('cat_hero_favorites')) || []);
 
             const [uiAlert, setUiAlert] = useState(null);
             const [uiConfirm, setUiConfirm] = useState(null);
@@ -197,7 +239,6 @@
             const [isDistAnimating, setIsDistAnimating] = useState(false);
             const [tempDistList, setTempDistList] = useState([]);
             const [slotDisplayNames, setSlotDisplayNames] = useState([]);
-            const [enableAnimation, setEnableAnimation] = useState(localStorage.getItem('cat_hero_enable_anim') !== 'false');
 
             const [adminSearch, setAdminSearch] = useState('');
             const [adminSortType, setAdminSortType] = useState('score');
@@ -207,7 +248,6 @@
             const [inputMount, setInputMount] = useState('');
             const [inputDirectGyeokchu, setInputDirectGyeokchu] = useState('');
 
-            // ================== CONSTANTS & AUTH ==================
             const showAlert = (msg, type = 'success') => setUiAlert({ message: msg, type });
             const closeAlert = () => setUiAlert(null);
 
@@ -216,7 +256,6 @@
             const isGuildAdmin = currentUserMember?.isAdmin === true; 
             const canEditLoot = isAdminMode || isGuildAdmin || isManager;
 
-            // ================== HELPERS ==================
             const renderBadges = (m) => {
                 if (!m) return null;
                 return (
@@ -301,7 +340,7 @@
                 setUiConfirm({ 
                     message: "로그아웃하고 닉네임 선택 화면으로 돌아가시겠습니까?", 
                     onConfirm: () => { 
-                        localStorage.removeItem('cat_hero_nickname'); 
+                        safeRemoveItem('cat_hero_nickname'); 
                         setNickname(''); 
                         setIsNameSet(false); 
                     } 
@@ -317,7 +356,7 @@
                     newFavs.push(targetName);
                 }
                 setFavorites(newFavs);
-                localStorage.setItem('cat_hero_favorites', JSON.stringify(newFavs));
+                safeSetItem('cat_hero_favorites', JSON.stringify(newFavs));
             };
 
             const getMemberGyeokchu = (m) => {
@@ -333,9 +372,13 @@
                 ta.value = text;
                 document.body.appendChild(ta);
                 ta.select();
-                document.execCommand('copy');
+                try {
+                    document.execCommand('copy');
+                    showAlert("텍스트가 복사되었습니다.");
+                } catch(e) {
+                    showAlert("복사 실패", "error");
+                }
                 document.body.removeChild(ta);
-                showAlert("텍스트가 복사되었습니다.");
             };
 
             const handleAdminUpdateField = async (id, field, value) => {
@@ -401,10 +444,10 @@
                             if (newFavs.includes(nickname)) {
                                 newFavs = newFavs.map(f => f === nickname ? targetName : f);
                                 setFavorites(newFavs);
-                                localStorage.setItem('cat_hero_favorites', JSON.stringify(newFavs));
+                                safeSetItem('cat_hero_favorites', JSON.stringify(newFavs));
                             }
 
-                            localStorage.setItem('cat_hero_nickname', targetName);
+                            safeSetItem('cat_hero_nickname', targetName);
                             setNickname(targetName);
                             setNewNicknameInput('');
                             showAlert(`성공적으로 닉네임이 [${targetName}](으)로 변경되었습니다!`);
@@ -494,7 +537,55 @@
                 });
             };
 
-            // ================== EFFECTS ==================
+            const handleRestoreSampleData = async () => {
+                setUiConfirm({
+                    message: "샘플 기록과 랭킹 데이터를 복구(생성)하시겠습니까?\n(현재 데이터에 임의의 기록과 점수가 추가됩니다)",
+                    onConfirm: async () => {
+                        try {
+                            const batchGroupId = `grp_sample_${new Date().getTime()}`;
+                            let restoredCount = 0;
+
+                            for (const member of members) {
+                                if (Math.random() > 0.3) {
+                                    const normalAdd = Math.floor(Math.random() * 4);
+                                    const bossAdd = Math.floor(Math.random() * 2);
+                                    
+                                    for(let i=0; i<normalAdd; i++){
+                                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24'), {
+                                            nickname: member.name, mob: '일반몹', playMin: Math.floor(Math.random() * 2), playSec: Math.floor(Math.random() * 60), groupId: batchGroupId, timestamp: serverTimestamp(), uid: user?.uid || 'system', isMulti: false
+                                        });
+                                        restoredCount++;
+                                    }
+                                    for(let i=0; i<bossAdd; i++){
+                                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24'), {
+                                            nickname: member.name, mob: '보스', playMin: Math.floor(Math.random() * 2), playSec: Math.floor(Math.random() * 60), groupId: batchGroupId, timestamp: serverTimestamp(), uid: user?.uid || 'system', isMulti: false
+                                        });
+                                        restoredCount++;
+                                    }
+
+                                    const totalCount = normalAdd + bossAdd;
+                                    const currentPoints = member.rankingPoints !== undefined ? member.rankingPoints : (stats.playerMap[member.name]?.points || 0);
+                                    const currentNormal = member.rankingNormal !== undefined ? member.rankingNormal : (stats.playerMap[member.name]?.normalCount || 0);
+                                    const currentBoss = member.rankingBoss !== undefined ? member.rankingBoss : (stats.playerMap[member.name]?.bossCount || 0);
+
+                                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', member.id), { 
+                                        score: (member.score || 0) + (totalCount * 5),
+                                        rankingPoints: currentPoints + (normalAdd * 5) + (bossAdd * 10),
+                                        rankingNormal: currentNormal + normalAdd,
+                                        rankingBoss: currentBoss + bossAdd,
+                                        latestTime: serverTimestamp()
+                                    });
+                                }
+                            }
+                            showAlert(`총 ${restoredCount}건의 샘플 데이터가 성공적으로 복구되었습니다.`);
+                        } catch (err) {
+                            console.error(err);
+                            showAlert("데이터 복구 실패", "error");
+                        }
+                    }
+                });
+            };
+
             useEffect(() => {
                 const applyTheme = () => {
                     let isDark = false;
@@ -507,7 +598,7 @@
                     else document.documentElement.classList.remove('dark');
                 };
                 applyTheme();
-                localStorage.setItem('cat_hero_theme', themeMode);
+                safeSetItem('cat_hero_theme', themeMode);
                 if (themeMode === 'system') {
                     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
                     const listener = () => applyTheme();
@@ -519,11 +610,11 @@
             useEffect(() => {
                 const scale = ZOOM_LEVELS[zoomIndex] / 100;
                 document.documentElement.style.fontSize = `${16 * scale}px`;
-                localStorage.setItem('cat_hero_zoom', zoomIndex);
+                safeSetItem('cat_hero_zoom', zoomIndex);
             }, [zoomIndex]);
 
             useEffect(() => {
-                localStorage.setItem('cat_hero_enable_anim', enableAnimation);
+                safeSetItem('cat_hero_enable_anim', enableAnimation);
             }, [enableAnimation]);
 
             useEffect(() => {
@@ -536,6 +627,7 @@
                         }
                     } catch (e) {
                         console.error("Auth init error:", e);
+                        try { await signInAnonymously(auth); } catch(err) {}
                     }
                 };
                 initAuth();
@@ -575,14 +667,27 @@
                     if (snapshot.exists()) setNotice(snapshot.data().notice || "");
                 }, (error) => console.error(error));
 
-                return () => { unsubMembers(); unsubLogs(); unsubLoot(); unsubSettings(); };
+                return () => { 
+                    if(unsubMembers) unsubMembers(); 
+                    if(unsubLogs) unsubLogs(); 
+                    if(unsubLoot) unsubLoot(); 
+                    if(unsubSettings) unsubSettings(); 
+                };
             }, [user, nickname]);
 
             useEffect(() => {
                 setNewNotice(notice);
             }, [notice]);
 
-            // ================== DATA MEMOS ==================
+            useEffect(() => {
+                if (uiAlert) {
+                    const timer = setTimeout(() => {
+                        setUiAlert(null);
+                    }, 3000);
+                    return () => clearTimeout(timer);
+                }
+            }, [uiAlert]);
+
             const stats = useMemo(() => {
                 const playerMap = {};
                 members.forEach(m => playerMap[m.name] = { 
@@ -1117,6 +1222,9 @@
                 const firstDay = new Date(year, month, 1).getDay();
                 const daysInMonth = new Date(year, month + 1, 0).getDate();
                 
+                const today = new Date();
+                const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                
                 const days = [];
                 for(let i = 0; i < firstDay; i++) {
                     days.push(<div key={`empty-${i}`} className="p-2 opacity-0"></div>);
@@ -1125,7 +1233,7 @@
                 for(let i = 1; i <= daysInMonth; i++) {
                     const dateStr = `${year}-${String(month+1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
                     const isSelected = selectedDateStr === dateStr;
-                    const isToday = new Date().toLocaleDateString('ko-KR').replace(/\. /g, '-').replace('.', '') === dateStr;
+                    const isToday = todayStr === dateStr;
                     
                     const evt = calendarEvents[dateStr];
                     const dotClass = getCalendarDotClass(evt);
@@ -1171,7 +1279,7 @@
                                             <option key={m.id} value={m.name} className="text-slate-900 dark:text-white">{m.name}</option>
                                         ))}
                                     </select>
-                                    <button onClick={() => { if(nickname) { localStorage.setItem('cat_hero_nickname', nickname); setIsNameSet(true); } }} className="w-full bg-blue-600 text-white font-black py-4 rounded-xl shadow-lg hover:bg-blue-700 active:scale-95 transition-all text-lg">대시보드 접속</button>
+                                    <button onClick={() => { if(nickname) { safeSetItem('cat_hero_nickname', nickname); setIsNameSet(true); } }} className="w-full bg-blue-600 text-white font-black py-4 rounded-xl shadow-lg hover:bg-blue-700 active:scale-95 transition-all text-lg">대시보드 접속</button>
                                 </div>
                             </div>
                         </div>
@@ -1314,9 +1422,11 @@
                                                         
                                                         <section>
                                                             <label className="text-[10px] text-slate-400 uppercase tracking-widest mb-3 block font-bold">데이터 관리 도구</label>
-                                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                                                                 <button onClick={() => setUiConfirm({ message: "균격 기록을 삭제합니까?\n(랭킹 누적 포인트 및 시즌 통계는 안전하게 보존됩니다)", onConfirm: async () => { const snap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24')); for (const d of snap.docs) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'conquest_logs_v24', d.id)); showAlert("기록이 초기화되었습니다."); } })} className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900 rounded-xl text-blue-600 dark:text-blue-400 text-xs font-black uppercase hover:bg-blue-100 transition-colors">기록(균격) 초기화</button>
                                                                 <button onClick={() => setUiConfirm({ message: "랭킹 점수를 완전 초기화합니까?", onConfirm: async () => { for (const m of members) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members_v24', m.id), { rankingPoints: 0, rankingNormal: 0, rankingBoss: 0, score: 0 }); showAlert("점수가 0으로 초기화되었습니다."); } })} className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900 rounded-xl text-red-600 dark:text-red-400 text-xs font-black uppercase hover:bg-red-100 transition-colors">랭킹(점수) 초기화</button>
+                                                                {/* 복구 기능 버튼이 여기에 구현되어 있습니다. */}
+                                                                <button onClick={handleRestoreSampleData} className="p-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900 rounded-xl text-emerald-600 dark:text-emerald-400 text-xs font-black uppercase hover:bg-emerald-100 transition-colors">샘플 데이터 복구</button>
                                                             </div>
                                                         </section>
                                                         
@@ -1765,7 +1875,7 @@
                                         <div className="space-y-8 animate-fadeIn">
                                             <div className="dashboard-card p-6 md:p-8 space-y-8">
                                                 <div>
-                                                    <h2 className="text-xl font-black italic text-emerald-600 dark:text-emerald-400 flex items-center gap-2"><i className="fas fa-gift"></i>격전지 분배 시스템</h2>
+                                                    <h2 className="text-xl font-black italic text-emerald-600 dark:text-emerald-400 flex items-center gap-2"><i className="fas fa-gift"></i>격전지 분 분배 시스템</h2>
                                                     <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 mb-4">
                                                         계산기에서 지정한 <strong className="text-emerald-500 dark:text-emerald-400">{selectedCalcMembers.length}명</strong>의 길드원 정보를 그대로 가져와 실제 드랍된 보상을 공정하게 분배합니다.
                                                     </p>
@@ -2018,7 +2128,7 @@
                                     <div className="flex items-center gap-3 mb-8 border-b border-slate-100 dark:border-slate-800 pb-4">
                                         <div className="w-10 h-10 rounded-full bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 flex items-center justify-center text-xl shadow-inner"><i className="fas fa-trophy"></i></div>
                                         <div>
-                                            <h2 className="text-xl font-black italic text-slate-900 dark:text-white">길드 명예의 전당</h2>
+                                            <h2 className="text-xl font-black italic text-slate-900 dark:text-white">길드 명예 전당</h2>
                                             <p className="text-[10px] text-slate-500 dark:text-slate-400">누적 활동 포인트(P) 기반 시즌 통계 및 순위입니다.</p>
                                         </div>
                                     </div>
@@ -2471,163 +2581,110 @@
                                                 </div>
                                                 {canEditLoot && (
                                                     <div className="flex gap-2 shrink-0 ml-2">
-                                                        <button onClick={() => setEditLootItem({ docId: currentSelectedGroup.id, idx, ...item })} className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-500 hover:text-blue-500 flex items-center justify-center transition-colors"><i className="fas fa-edit"></i></button>
-                                                        <button onClick={() => handleDeleteLootItem(currentSelectedGroup.id, idx)} className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-500 hover:text-red-500 flex items-center justify-center transition-colors"><i className="fas fa-trash"></i></button>
+                                                        <button onClick={() => setEditLootItem({ docId: currentSelectedGroup.id, idx, ...item })} className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-700 text-blue-500 hover:text-blue-400 transition-colors" title="수정"><i className="fas fa-edit"></i></button>
+                                                        <button onClick={() => handleDeleteLootItem(currentSelectedGroup.id, idx)} className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-700 text-red-400 hover:text-red-500 transition-colors" title="삭제"><i className="fas fa-trash-alt"></i></button>
                                                     </div>
                                                 )}
                                             </div>
-                                        )})}
+                                            );
+                                        })}
+                                        {currentSelectedGroup.list?.length === 0 && <div className="text-center py-10 text-slate-400 font-bold">상세 기록이 비어 있습니다.</div>}
                                     </div>
                                 </div>
                             </div>
                         )}
 
-                        {/* 분배 이력 수정 모달 (개별 건) */}
-                        {editLootItem && canEditLoot && (
+                        {/* 아이템 수정 모달 */}
+                        {editLootItem && (
                             <div className="fixed inset-0 z-[1500] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn text-slate-900 dark:text-white" onClick={() => setEditLootItem(null)}>
-                                <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl p-8 max-w-sm w-full border-t-[8px] border-emerald-500" onClick={e=>e.stopPropagation()}>
-                                    <h3 className="text-lg font-black mb-6 flex items-center gap-2"><i className="fas fa-edit text-emerald-500"></i>분배 이력 수정</h3>
+                                <div className="bg-white dark:bg-slate-900 rounded-[2rem] shadow-2xl p-6 max-w-sm w-full border-t-8 border-blue-500" onClick={e=>e.stopPropagation()}>
+                                    <h3 className="text-lg font-black mb-4">분배 기록 수정</h3>
                                     <form onSubmit={handleUpdateLootItem} className="space-y-4">
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">닉네임</label>
-                                            <input type="text" className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl dark:bg-slate-800 text-sm outline-none focus:border-emerald-500 font-bold text-slate-900 dark:text-white" value={editLootItem.winner} onChange={e => setEditLootItem({...editLootItem, winner: e.target.value})} required />
+                                        <div>
+                                            <label className="text-xs font-bold text-slate-500 block mb-1">당첨 길드원</label>
+                                            <select className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none" value={editLootItem.winner} onChange={e => setEditLootItem({...editLootItem, winner: e.target.value})}>
+                                                {members.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+                                            </select>
                                         </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">보상 내용</label>
-                                            <input type="text" className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl dark:bg-slate-800 text-sm outline-none focus:border-emerald-500 font-bold text-slate-900 dark:text-white" value={editLootItem.itemStr} onChange={e => setEditLootItem({...editLootItem, itemStr: e.target.value})} required />
+                                        <div>
+                                            <label className="text-xs font-bold text-slate-500 block mb-1">아이템 명</label>
+                                            <input type="text" className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none" value={editLootItem.itemStr} onChange={e => setEditLootItem({...editLootItem, itemStr: e.target.value})} />
                                         </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">수량</label>
-                                            <input type="number" min="1" className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl dark:bg-slate-800 text-sm outline-none focus:border-emerald-500 font-bold font-mono text-slate-900 dark:text-white" value={editLootItem.qty || 1} onChange={e => setEditLootItem({...editLootItem, qty: Number(e.target.value) || 1})} required />
+                                        <div>
+                                            <label className="text-xs font-bold text-slate-500 block mb-1">수량</label>
+                                            <input type="number" min="1" className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none" value={editLootItem.qty || 1} onChange={e => setEditLootItem({...editLootItem, qty: Number(e.target.value)})} />
                                         </div>
-                                        <div className="grid grid-cols-2 gap-3 pt-4">
-                                            <button type="button" onClick={() => setEditLootItem(null)} className="py-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-black hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">취소</button>
-                                            <button type="submit" className="py-3 bg-emerald-500 text-white rounded-xl text-xs font-black shadow-md hover:bg-emerald-600 transition-colors">수정 반영</button>
+                                        <div className="flex gap-2 pt-2">
+                                            <button type="button" onClick={() => setEditLootItem(null)} className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl font-bold">취소</button>
+                                            <button type="submit" className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black shadow-md">저장</button>
                                         </div>
                                     </form>
                                 </div>
                             </div>
                         )}
+
+                        {/* 글로벌 알림 모달 */}
+                        {uiAlert && (
+                            <div className="fixed top-4 right-4 z-[2000] animate-fadeIn">
+                                <div className={`px-5 py-3 rounded-xl shadow-lg border-l-4 font-bold flex items-center gap-3 ${uiAlert.type === 'error' ? 'bg-white dark:bg-slate-800 border-red-500 text-slate-800 dark:text-white' : 'bg-slate-800 dark:bg-slate-700 border-emerald-500 text-white'}`}>
+                                    <i className={`fas ${uiAlert.type === 'error' ? 'fa-exclamation-circle text-red-500' : 'fa-check-circle text-emerald-500'}`}></i>
+                                    {uiAlert.message}
+                                    <button onClick={closeAlert} className="ml-4 opacity-50 hover:opacity-100"><i className="fas fa-times"></i></button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 글로벌 컨펌 모달 */}
+                        {uiConfirm && (
+                            <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn text-slate-900 dark:text-white" onClick={() => setUiConfirm(null)}>
+                                <div className="bg-white dark:bg-slate-900 rounded-[2rem] shadow-2xl p-6 md:p-8 max-w-sm w-full text-center border border-slate-200 dark:border-slate-700" onClick={e=>e.stopPropagation()}>
+                                    <div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-500 text-2xl">
+                                        <i className="fas fa-question-circle"></i>
+                                    </div>
+                                    <p className="text-sm md:text-base font-black mb-6 whitespace-pre-wrap leading-relaxed">{uiConfirm.message}</p>
+                                    
+                                    {uiConfirm.checkboxLabel && (
+                                        <label className="flex items-center justify-center gap-2 text-xs text-slate-500 mb-6 cursor-pointer">
+                                            <input type="checkbox" id="confirmCheckbox" className="w-4 h-4 accent-blue-500" />
+                                            {uiConfirm.checkboxLabel}
+                                        </label>
+                                    )}
+
+                                    <div className="flex gap-3">
+                                        <button onClick={() => setUiConfirm(null)} className="flex-1 py-3.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl font-bold transition-colors">취소</button>
+                                        <button onClick={() => { 
+                                            const isChecked = uiConfirm.checkboxLabel ? document.getElementById('confirmCheckbox')?.checked : false;
+                                            uiConfirm.onConfirm(isChecked); 
+                                            setUiConfirm(null); 
+                                        }} className="flex-1 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black shadow-md shadow-blue-500/20 transition-all active:scale-95">확인</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 관리자 암호 입력 모달 */}
+                        {showAdminEntry && !isAdminMode && (
+                            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn text-slate-900 dark:text-white" onClick={() => setShowAdminEntry(false)}>
+                                <div className="bg-white dark:bg-slate-900 rounded-[2rem] shadow-2xl p-6 max-w-sm w-full border-t-8 border-slate-800" onClick={e=>e.stopPropagation()}>
+                                    <h3 className="text-lg font-black mb-2 flex items-center gap-2"><i className="fas fa-lock text-slate-400"></i>관리자 접근</h3>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">권한이 필요합니다. 비밀번호를 입력하세요.</p>
+                                    <input type="password" value={adminPass} onChange={e=>setAdminPass(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAdminLogin()} className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-slate-800 dark:focus:border-slate-500 mb-4" placeholder="비밀번호" />
+                                    <div className="flex gap-2">
+                                        <button onClick={() => setShowAdminEntry(false)} className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl font-bold">취소</button>
+                                        <button onClick={handleAdminLogin} className="flex-1 py-3 bg-slate-800 text-white rounded-xl font-black shadow-md hover:bg-slate-900">확인</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                     </div>
                 );
             }
 
-            return (
-                <React.Fragment>
-                    {pageContent}
-
-                    {/* 길드원 스탯 세팅 팝업 모달 */}
-                    {statModalMember && (
-                        <div className="fixed inset-0 z-[1100] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn font-bold text-slate-900 dark:text-white">
-                            <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl p-8 max-w-sm w-full border-t-[8px] border-blue-500 space-y-6">
-                                <div className="text-center">
-                                    <span className="text-[10px] text-blue-500 dark:text-blue-400 uppercase tracking-widest font-black block mb-1">격추 제원 설정</span>
-                                    <h3 className="text-xl font-black italic break-words">[{statModalMember.name}] 대원 스탯</h3>
-                                </div>
-
-                                <div className="space-y-4">
-                                    <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700 space-y-4">
-                                        <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-black border-b border-slate-200 dark:border-slate-700 pb-2">A. 스탯공식 자동 계산</span>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div>
-                                                <label className="text-[10px] text-slate-500 dark:text-slate-400 block mb-1.5 font-bold">스탯 수치</label>
-                                                <input type="number" placeholder="입력" className="w-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-xl dark:bg-slate-900 text-sm outline-none focus:border-blue-500 text-center font-mono font-bold text-slate-900 dark:text-white" value={inputStat} onChange={e => setInputStat(e.target.value)} onFocus={e=>e.target.select()} />
-                                            </div>
-                                            <div>
-                                                <label className="text-[10px] text-slate-500 dark:text-slate-400 block mb-1.5 font-bold">탈것 수치</label>
-                                                <input type="number" placeholder="입력" className="w-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-xl dark:bg-slate-900 text-sm outline-none focus:border-blue-500 text-center font-mono font-bold text-slate-900 dark:text-white" value={inputMount} onChange={e => setInputMount(e.target.value)} onFocus={e=>e.target.select()} />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="text-center text-[10px] text-slate-400 dark:text-slate-500 font-bold bg-slate-100 dark:bg-slate-800 py-1 rounded-full mx-10">OR</div>
-
-                                    <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700 space-y-4">
-                                        <span className="text-[11px] text-amber-500 dark:text-amber-400 block font-black border-b border-slate-200 dark:border-slate-700 pb-2">B. 최종 격추 직접 입력</span>
-                                        <div>
-                                            <input type="number" placeholder="예: 2556" className="w-full p-3 border-2 border-amber-200 dark:border-amber-900/50 rounded-xl dark:bg-slate-900 text-base outline-none focus:border-amber-500 text-center font-mono font-black text-slate-900 dark:text-white" value={inputDirectGyeokchu} onChange={e => setInputDirectGyeokchu(e.target.value)} onFocus={e=>e.target.select()} />
-                                            <p className="text-[9px] text-slate-400 dark:text-slate-500 mt-2 font-bold leading-tight">* 직접 입력 시 자동 계산된 값을 무시하고 이 수치로 강제 고정됩니다.</p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-3 pt-2">
-                                    <button onClick={() => setStatModalMember(null)} className="py-3.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-2xl text-xs font-black transition-colors">취소</button>
-                                    <button onClick={handleSaveMemberStats} className="py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-black shadow-lg transition-colors">저장 및 반영</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* 공통 컴포넌트: 보안 및 설정 인증 (코드 입력 모달) */}
-                    {showAdminEntry && (
-                        <div className="fixed inset-0 z-[1200] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn font-bold">
-                            <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl p-8 md:p-10 max-w-sm w-full border-t-[8px] border-slate-800 text-center">
-                                <div className="mb-8">
-                                    <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-800 dark:text-slate-300 text-xl"><i className="fas fa-lock"></i></div>
-                                    <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1">설정 및 보안 인증</p>
-                                    <h3 className="text-xl font-black text-slate-900 dark:text-white">접속 코드 입력</h3>
-                                    <p className="text-[10px] text-slate-400 mt-2">* 일반 길드원은 비워두고 확인을 누르세요.</p>
-                                </div>
-                                <div className="flex flex-col gap-4">
-                                    <input type="password" autoFocus placeholder="Passkey (선택)" className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-4 text-center text-xl outline-none focus:border-slate-500 text-slate-900 dark:text-white font-black tracking-widest" value={adminPass} onChange={e => setAdminPass(e.target.value)} onKeyDown={e => { if(e.key === 'Enter') handleAdminLogin(); }} />
-                                    <div className="grid grid-cols-2 gap-3 mt-2">
-                                        <button onClick={() => { setShowAdminEntry(false); setAdminPass(""); }} className="py-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-2xl font-bold transition-colors">취소</button>
-                                        <button onClick={handleAdminLogin} className="py-4 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white rounded-2xl font-bold shadow-lg transition-colors">확인</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* 공통 컴포넌트: 알럿 */}
-                    {uiAlert && (
-                        <div className="fixed inset-0 z-[1300] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn text-slate-900 font-bold">
-                            <div className={`bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl p-8 md:p-10 max-w-sm w-full text-center border-t-[8px] ${uiAlert.type === 'error' ? 'border-red-500' : 'border-blue-500'}`}>
-                                <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-6 text-2xl ${uiAlert.type === 'error' ? 'bg-red-100 text-red-500 dark:bg-red-900/30' : 'bg-blue-100 text-blue-500 dark:bg-blue-900/30'}`}>
-                                    <i className={`fas ${uiAlert.type === 'error' ? 'fa-exclamation-triangle' : 'fa-check'}`}></i>
-                                </div>
-                                <p className="text-base md:text-lg mb-8 text-slate-900 dark:text-white font-bold leading-relaxed">{uiAlert.message}</p>
-                                <button onClick={closeAlert} className={`w-full text-white py-4 rounded-2xl font-black shadow-lg transition-colors ${uiAlert.type === 'error' ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-600 hover:bg-blue-700'}`}>확인</button>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* 공통 컴포넌트: 컨펌 (체크박스 지원) */}
-                    {uiConfirm && (
-                        <div className="fixed inset-0 z-[1300] flex items-center justify-center p-4 custom-modal-overlay animate-fadeIn text-slate-900 font-bold">
-                            <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl p-8 md:p-10 max-w-sm w-full text-center border-t-[8px] border-orange-500 flex flex-col">
-                                <div className="w-12 h-12 bg-orange-100 dark:bg-orange-900/30 text-orange-500 rounded-full flex items-center justify-center mx-auto mb-6 text-2xl"><i className="fas fa-question"></i></div>
-                                <p className="text-base md:text-lg mb-6 text-slate-900 dark:text-white font-bold whitespace-pre-wrap leading-relaxed">{uiConfirm.message}</p>
-                                
-                                {uiConfirm.checkboxLabel && (
-                                    <label className="flex items-center justify-center gap-2 mb-8 cursor-pointer text-sm text-slate-700 dark:text-slate-300 p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
-                                        <input type="checkbox" id="confirm-checkbox" className="w-5 h-5 accent-orange-500 rounded" />
-                                        <span className="font-bold">{uiConfirm.checkboxLabel}</span>
-                                    </label>
-                                )}
-
-                                <div className={`grid grid-cols-2 gap-3 mt-auto ${!uiConfirm.checkboxLabel ? 'pt-2' : ''}`}>
-                                    <button onClick={() => setUiConfirm(null)} className="py-4 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-2xl font-bold transition-colors">취소</button>
-                                    <button onClick={() => { 
-                                        let isChecked = false;
-                                        if (uiConfirm.checkboxLabel) {
-                                            const cb = document.getElementById('confirm-checkbox');
-                                            if (cb) isChecked = cb.checked;
-                                        }
-                                        uiConfirm.onConfirm(isChecked); 
-                                        setUiConfirm(null); 
-                                    }} className="py-4 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl font-bold shadow-lg transition-colors">확인</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </React.Fragment>
-            );
+            return pageContent;
         }
 
-        const container = document.getElementById('root');
-        const root = ReactDOM.createRoot(container);
+        const root = createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
 </body>
