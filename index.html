@@ -234,9 +234,11 @@
             const isGuildAdmin = currentUserMember?.isAdmin === true; 
             const hasAnyAdmin = members.some(m => m.isAdmin);
             
-            // [핵심 보안 패치] 닉네임 선택만으로 권한이 뚫리는 것을 방지. 무조건 비밀번호 인증(isAdminMode) 필요.
+            // [핵심 보안 패치] 설정 탭의 민감한 관리자 도구는 무조건 비밀번호 인증(isAdminMode) 필요
             const canAccessAdminTools = isAdminMode && (!hasAnyAdmin || isGuildAdmin);
-            const canEditLoot = isAdminMode && (!hasAnyAdmin || isGuildAdmin || isManager);
+            
+            // [수정] 관리자 및 총무 직책을 부여받은 길드원은 암호 입력 없이도 즉시 블다 금고 등록/분배 가능
+            const canEditLoot = isGuildAdmin || isManager || isAdminMode;
 
             const renderBadges = (m) => {
                 if (!m) return null;
